@@ -4,8 +4,14 @@ library(ggplot2)
 library(dbplot)
 library(lubridate)
 
+# Configuraciones de spark
+config <- spark_config()
+config$spark.driver.memory <- "8g"
+config$spark.executor.memory <- "4g"
+config$spark.storage.memoryFraction <- 0.8
+
 # Establecemos la coneccion con spark
-sc <- spark_connect(master = "local")
+sc <- spark_connect(master = "local", config = config)
 
 # Copiamos el formato de las tablas para no tener errores
 customer_df <- read.csv("Datos/eci_customer_data.csv", nrows = 6)
@@ -44,10 +50,16 @@ eci_product_master_totales <- eci_product_master_totales |> rename(SKU = sku, SU
 
 # Filtrar los datos faltantes 
 
+# Trabajamos con una muestra de todos los datos
+eci_transactions_sample <- eci_transactions |> 
+  sdf_sample(0.02) |> # Trabajamos con solo el 2% de los datos 
+  collect()
+
 # Intento unir las bases de transacciones y stores
 eci_transactions_stores_sample <- eci_transactions_sample |> 
-  left_join(eci_stores |> collect(), by = "STORE_ID") |> 
-  mutate(DATE = as_date(DATE))
+  left_join(eci_stores_clusters_join, by = "STORE_ID") |> 
+  mutate(DATE = as_date(DATE)) |> 
+  filter(!is.na(BRAND))
 
 eci_transactions_stores_sample$mes <- month(eci_transactions_stores_sample$DATE)
 eci_transactions_stores_sample$año <- year(eci_transactions_stores_sample$DATE)
@@ -57,11 +69,9 @@ eci_transactions_stores_sample$mes_año <- ym(paste(eci_transactions_stores_samp
 eci_transactions_stores_prod_sample <- eci_transactions_stores_sample |> 
   left_join(eci_product_master_totales, by = c("SKU", "SUBGROUP"))
 
+# Variable ganancia
+eci_transactions_stores_prod_sample$margen <- eci_transactions_stores_prod_sample$TOTAL_SALES - eci_transactions_stores_prod_sample$TOTAL_SALES/eci_transactions_stores_prod_sample$PRICE*eci_transactions_stores_prod_sample$costos
 
-# Trabajamos con una muestra de todos los datos
-eci_transactions_sample <- eci_transactions |> 
-  sdf_sample(0.02) |> # Trabajamos con solo el 2% de los datos 
-  collect()
 
 # Deteccion de valores faltantes (Todos los data frames)
 # Muestra de la base de datos de transacciones
@@ -122,9 +132,10 @@ eci_transactions_stores_sample |>
   theme_bw() +
   theme(legend.position = "top")
 
+# Evolucion temporal de la demanada x 
 
 # Analisis exploratorio (dividido en dos partes, agrupar los datos trabajando en spark y luego graficar)
-
+# Grafico que va
 transacciones_agrup <- eci_transactions |> 
   group_by(SUBGROUP) |> 
   summarise(Demanda = sum(TOTAL_SALES)) |> 
@@ -132,19 +143,147 @@ transacciones_agrup <- eci_transactions |>
   print()
 
 transacciones_agrup |> 
-  top_n(10, wt = Demanda) |>  
+  top_n(10, wt = Demanda) |>
+  arrange(desc(Demanda)) |> 
   ggplot() +
   aes(x = SUBGROUP, y = Demanda) +
   geom_bar(stat = "identity") +
   coord_flip() +
   theme_bw()
 
-transacciones_agrup_store_sample <- eci_transactions_stores_sample |> 
-  group_by(STORE_ID, SUBGROUP) |> 
+# Grafico que va
+ganancias_tiendas_totales <- eci_transactions_stores_prod_sample |> 
+  group_by(SUBGROUP) |> 
+  summarise(Margen = sum(margen)) |> 
+  print()
+
+ganancias_tiendas_totales |> 
+  top_n(10, wt = Margen) |>
+  # arrange(desc(Demanda)) |> 
+  ggplot() +
+  aes(x = SUBGROUP, y = Margen) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_bw()
+
+
+# Grafico que va
+transacciones_agrup_store_sample <- eci_transactions_stores_sample |>
+  filter(BRAND == "AsterionHouse") |> 
+  group_by(SUBGROUP) |> 
   summarise(Demanda = sum(TOTAL_SALES)) |> 
   ungroup() |> 
-  collect() |> 
   print()
+
+transacciones_agrup_store_sample |> 
+  top_n(10, wt = Demanda) |>
+  arrange(desc(Demanda)) |> 
+  ggplot() +
+  aes(x = SUBGROUP, y = Demanda) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_bw()
+
+# Grafico que va
+ganancias_asterion <- eci_transactions_stores_prod_sample |> 
+  filter(BRAND == "AsterionHouse") |> 
+  group_by(SUBGROUP) |> 
+  summarise(Margen = sum(margen)) |> 
+  print()
+
+ganancias_asterion |> 
+  top_n(10, wt = Margen) |>
+  # arrange(desc(Demanda)) |> 
+  ggplot() +
+  aes(x = SUBGROUP, y = Margen) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_bw()
+
+# Grafico que va
+tipo_tienda_demanda <- eci_transactions_stores_prod_sample |>
+  group_by(STORE_TYPE) |> 
+  summarise(Demanda = sum(TOTAL_SALES)) |> 
+  ungroup() |> 
+  print()
+
+tipo_tienda_demanda |> 
+  arrange(desc(Demanda)) |> 
+  ggplot() +
+  aes(x = STORE_TYPE, y = Demanda) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_bw()
+
+# Grafico que va
+tipo_tienda_ganancia <- eci_transactions_stores_prod_sample |>
+  group_by(STORE_ID, STORE_TYPE) |>
+  summarise(MargenTienda = sum(margen, na.rm = TRUE), .groups = "drop") |>
+  group_by(STORE_TYPE) |>
+  summarise(MargenPromedio = mean(MargenTienda)) |> 
+  ungroup()
+
+tipo_tienda_ganancia |> 
+  # arrange(desc(Margen)) |> 
+  ggplot() +
+  aes(x = STORE_TYPE, y = MargenPromedio) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_bw()
+
+# Grafico que va
+categoria_demanda <- eci_transactions_stores_prod_sample |>
+  group_by(category) |> 
+  summarise(Demanda = sum(TOTAL_SALES)) |> 
+  ungroup() |> 
+  print()
+
+categoria_demanda |> 
+  arrange(desc(Demanda)) |> 
+  ggplot() +
+  aes(x = category, y = Demanda) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_bw()
+
+# Grafico que va
+categoria_ganancia <- eci_transactions_stores_prod_sample |>
+  group_by(category) |> 
+  summarise(Margen = sum(margen)) |> 
+  ungroup() |> 
+  print()
+
+categoria_ganancia |> 
+  arrange(desc(Margen)) |> 
+  ggplot() +
+  aes(x = category, y = Margen) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_bw()
+
+# Grafico que va
+grupo_demanda <- eci_transactions_stores_prod_sample |>
+  group_by(group) |> 
+  summarise(Demanda = sum(TOTAL_SALES)) |> 
+  ungroup() |> 
+  print()
+
+grupo_demanda |> 
+  top_n(n = 10, wt = Demanda) |> 
+  arrange(desc(Demanda)) |> 
+  ggplot() +
+  aes(x = group, y = Demanda) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_bw()
+
+# Grafico que va
+grupo_ganancia <- eci_transactions_stores_prod_sample |>
+  group_by(category) |> 
+  summarise(Margen = sum(margen)) |> 
+  ungroup() |> 
+  print()
+
 
 # Desconectamos spark
 spark_disconnect(sc)
