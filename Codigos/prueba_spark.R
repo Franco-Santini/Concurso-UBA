@@ -3,6 +3,7 @@ library(dplyr)
 library(ggplot2)
 library(dbplot)
 library(lubridate)
+library(rlang)
 
 # Configuraciones de spark
 config <- spark_config()
@@ -37,6 +38,38 @@ eci_stores_clusters <- spark_read_csv(sc, name = "eci_tiendas_cluster", path = "
 eci_stores_totales <- eci_stores |> collect() |> mutate(CLOSEDATE = as_date(CLOSEDATE)) |> filter(CLOSEDATE > "2023-12-31" | is.na(CLOSEDATE)) |> filter(!is.na(STORE_TYPE))
 eci_stores_clusters_totales <- eci_stores_clusters |> collect()
 eci_product_master_totales <- eci_product_master |> collect() 
+
+# Join de las tablas (con los datos totales de transacciones)
+eci_product_master_totales <- eci_product_master 
+eci_product_master_totales <- eci_product_master_totales |> rename(SKU = sku, SUBGROUP = subgroup, brand_prod = brand)
+
+eci_stores_totales <- eci_stores |> mutate(CLOSEDATE = as_date(CLOSEDATE)) |> filter(CLOSEDATE > "2023-12-31" | is.na(CLOSEDATE)) |> filter(!is.na(STORE_TYPE))
+eci_stores_clusters_totales <- eci_stores_clusters
+eci_stores_clusters_join <- eci_stores_totales |> 
+  left_join(eci_stores_clusters_totales, by = "STORE_ID") |> 
+  select(-c(BRAND_y, STORE_NAME_y)) |> 
+  rename(BRAND = BRAND_x, STORE_NAME = STORE_NAME_x)
+
+eci_transactions_stores <- eci_transactions |> 
+  left_join(eci_stores_clusters_join, by = "STORE_ID") 
+
+eci_transactions_stores <- eci_transactions_stores |>
+  mutate(DATE = as_date(DATE),
+         mes = month(DATE),
+         año = year(DATE)) |> 
+  mutate(año_mes = to_date(concat_ws("-", año, lpad(mes, 2, "0"), "01")))
+
+eci_transactions_stores_prod <- eci_transactions_stores |> 
+  left_join(eci_product_master_totales, by = c("SKU", "SUBGROUP"))
+
+eci_transactions_stores_prod_sample$margen <- eci_transactions_stores_prod_sample$TOTAL_SALES - eci_transactions_stores_prod_sample$TOTAL_SALES/eci_transactions_stores_prod_sample$PRICE*eci_transactions_stores_prod_sample$costos
+
+eci_transactions_stores_prod <- eci_transactions_stores_prod |> 
+  mutate(
+    margen = TOTAL_SALES - (TOTAL_SALES/PRICE)*costos,
+    ganancia = (PRICE - costos) * TOTAL_SALES
+  ) |> 
+  filter(!is.na(BRAND))
 
 # Renombre de las columnas
 # Tabla de tiendas
@@ -74,10 +107,10 @@ eci_transactions_stores_prod_sample$margen <- eci_transactions_stores_prod_sampl
 
 
 # Deteccion de valores faltantes (Todos los data frames)
-# Muestra de la base de datos de transacciones
-eci_transactions_sample |> 
-  select(everything()) |> 
-  summarize(across(everything(), ~sum(is.na(.))))
+# Base completa de transacciones
+eci_transactions %>%
+  summarise_all(~sum(as.integer(is.na(.))))
+
 
 # Base completa de grupo de productos
 eci_product_groups |> 
@@ -110,26 +143,30 @@ eci_customer |>
   summarize(across(everything(), ~sum(is.na(.))))
 
 # Evolucion temporal de la demanda
-eci_transactions_stores_sample |> 
-  group_by(mes_año) |> 
+eci_transactions_stores_prod |> 
+  group_by(año_mes) |> 
   summarise(demanda = sum(TOTAL_SALES)) |> 
+  ungroup() |> 
   ggplot() +
-  aes(x = mes_año, y = demanda) +
+  aes(x = año_mes, y = demanda) +
   geom_line() +
-  geom_point() +
-  theme_bw() +
-  theme(legend.position = "top")
+  geom_point(color = "dodgerblue2") +
+  labs(x = "Fecha", y = "Demanda ($)") +
+  theme_bw() 
 
 # Evolucion temporal de la demanda x subgrupos que más demanda tienen
-eci_transactions_stores_sample |> 
-  group_by(mes_año, SUBGROUP) |> 
+eci_transactions_stores_prod |>
+  group_by(año_mes, SUBGROUP) |> 
   summarise(demanda_x_subg = sum(TOTAL_SALES)) |> 
   filter(SUBGROUP %in% c("Headphones", "Wearables", "Speakers")) |> 
+  ungroup() |> 
   ggplot() +
-  aes(x = mes_año, y = demanda_x_subg, color = factor(SUBGROUP)) +
+  aes(x = año_mes, y = demanda_x_subg, color = factor(SUBGROUP)) +
   geom_line() +
   geom_point() +
   theme_bw() +
+  scale_color_manual(values = c("firebrick2", "dodgerblue2", "#982649")) +
+  labs(x = "Fecha", y = "Demanda($)", color = "Subgrupo") +
   theme(legend.position = "top")
 
 # Evolucion temporal de la demanada x 
@@ -144,146 +181,146 @@ transacciones_agrup <- eci_transactions |>
 
 transacciones_agrup |> 
   top_n(10, wt = Demanda) |>
-  arrange(desc(Demanda)) |> 
   ggplot() +
-  aes(x = SUBGROUP, y = Demanda) +
-  geom_bar(stat = "identity") +
+  aes(x = reorder(SUBGROUP, Demanda), y = Demanda) +
+  geom_bar(stat = "identity", color = "black", fill = "dodgerblue2") +
   coord_flip() +
+  labs(y = "Demanda ($)", x = "Subgrupo") +
   theme_bw()
 
 # Grafico que va
-ganancias_tiendas_totales <- eci_transactions_stores_prod_sample |> 
+ganancias_tiendas_totales <- eci_transactions_stores_prod |> 
   group_by(SUBGROUP) |> 
-  summarise(Margen = sum(margen)) |> 
+  summarise(Margen = sum(margen)) |>
+  collect() |> 
   print()
 
 ganancias_tiendas_totales |> 
   top_n(10, wt = Margen) |>
-  # arrange(desc(Demanda)) |> 
   ggplot() +
-  aes(x = SUBGROUP, y = Margen) +
-  geom_bar(stat = "identity") +
+  aes(x = reorder(SUBGROUP, Margen), y = Margen) +
+  geom_bar(stat = "identity", color = "black", fill = "dodgerblue2") +
   coord_flip() +
+  labs(y = "Margen ($)", x = "Subgrupo") +
   theme_bw()
 
 
 # Grafico que va
-transacciones_agrup_store_sample <- eci_transactions_stores_sample |>
+transacciones_agrup_store_sample <- eci_transactions_stores_prod |>
   filter(BRAND == "AsterionHouse") |> 
   group_by(SUBGROUP) |> 
   summarise(Demanda = sum(TOTAL_SALES)) |> 
   ungroup() |> 
+  collect() |> 
   print()
 
 transacciones_agrup_store_sample |> 
   top_n(10, wt = Demanda) |>
-  arrange(desc(Demanda)) |> 
   ggplot() +
-  aes(x = SUBGROUP, y = Demanda) +
-  geom_bar(stat = "identity") +
+  aes(x = reorder(SUBGROUP, Demanda), y = Demanda) +
+  geom_bar(stat = "identity", color = "black", fill = "dodgerblue2") +
   coord_flip() +
+  labs(y = "Demanda ($)", x = "Subgrupo") +
   theme_bw()
 
 # Grafico que va
-ganancias_asterion <- eci_transactions_stores_prod_sample |> 
+ganancias_asterion <- eci_transactions_stores_prod |> 
   filter(BRAND == "AsterionHouse") |> 
   group_by(SUBGROUP) |> 
   summarise(Margen = sum(margen)) |> 
+  collect() |> 
   print()
 
 ganancias_asterion |> 
   top_n(10, wt = Margen) |>
-  # arrange(desc(Demanda)) |> 
   ggplot() +
-  aes(x = SUBGROUP, y = Margen) +
-  geom_bar(stat = "identity") +
+  aes(x = reorder(SUBGROUP, Margen), y = Margen) +
+  geom_bar(stat = "identity", color = "black", fill = "dodgerblue2") +
   coord_flip() +
+  labs(y = "Margen ($)", x = "Subgrupo") +
   theme_bw()
 
 # Grafico que va
-tipo_tienda_demanda <- eci_transactions_stores_prod_sample |>
+tipo_tienda_demanda <- eci_transactions_stores_prod |>
   group_by(STORE_TYPE) |> 
   summarise(Demanda = sum(TOTAL_SALES)) |> 
   ungroup() |> 
+  collect() |> 
   print()
 
 tipo_tienda_demanda |> 
-  arrange(desc(Demanda)) |> 
   ggplot() +
-  aes(x = STORE_TYPE, y = Demanda) +
-  geom_bar(stat = "identity") +
+  aes(x = reorder(STORE_TYPE, Demanda), y = Demanda) +
+  geom_bar(stat = "identity", color = "black", fill = "dodgerblue2") +
   coord_flip() +
+  labs(y = "Demanda ($)", x = "Tipo de tienda") +
   theme_bw()
 
 # Grafico que va
-tipo_tienda_ganancia <- eci_transactions_stores_prod_sample |>
+tipo_tienda_ganancia <- eci_transactions_stores_prod |>
   group_by(STORE_ID, STORE_TYPE) |>
   summarise(MargenTienda = sum(margen, na.rm = TRUE), .groups = "drop") |>
   group_by(STORE_TYPE) |>
   summarise(MargenPromedio = mean(MargenTienda)) |> 
-  ungroup()
+  ungroup() |> 
+  collect()
 
 tipo_tienda_ganancia |> 
-  # arrange(desc(Margen)) |> 
   ggplot() +
-  aes(x = STORE_TYPE, y = MargenPromedio) +
-  geom_bar(stat = "identity") +
+  aes(x = reorder(STORE_TYPE, MargenPromedio), y = MargenPromedio) +
+  geom_bar(stat = "identity", color = "black", fill = "dodgerblue2") +
   coord_flip() +
+  labs(y = "Margen promedio ($)", x = "Tipo de tienda") +
   theme_bw()
 
 # Grafico que va
-categoria_demanda <- eci_transactions_stores_prod_sample |>
+categoria_demanda <- eci_transactions_stores_prod |>
   group_by(category) |> 
   summarise(Demanda = sum(TOTAL_SALES)) |> 
   ungroup() |> 
+  collect() |> 
   print()
 
 categoria_demanda |> 
-  arrange(desc(Demanda)) |> 
   ggplot() +
-  aes(x = category, y = Demanda) +
-  geom_bar(stat = "identity") +
+  aes(x = reorder(category, Demanda), y = Demanda) +
+  geom_bar(stat = "identity", color = "black", fill = "dodgerblue2") +
   coord_flip() +
+  labs(x = "Categoría", y = "Demanda ($)") +
   theme_bw()
 
 # Grafico que va
-categoria_ganancia <- eci_transactions_stores_prod_sample |>
+categoria_ganancia <- eci_transactions_stores_prod |>
   group_by(category) |> 
   summarise(Margen = sum(margen)) |> 
   ungroup() |> 
+  collect() |> 
   print()
 
 categoria_ganancia |> 
-  arrange(desc(Margen)) |> 
   ggplot() +
-  aes(x = category, y = Margen) +
-  geom_bar(stat = "identity") +
+  aes(x = reorder(category, Margen), y = Margen) +
+  geom_bar(stat = "identity", color = "black", fill = "dodgerblue2") +
   coord_flip() +
+  labs(x = "Categoría", y = "Margen ($)") +
   theme_bw()
 
 # Grafico que va
-grupo_demanda <- eci_transactions_stores_prod_sample |>
+grupo_demanda <- eci_transactions_stores_prod |>
   group_by(group) |> 
   summarise(Demanda = sum(TOTAL_SALES)) |> 
   ungroup() |> 
+  collect() |> 
   print()
 
 grupo_demanda |> 
   top_n(n = 10, wt = Demanda) |> 
-  arrange(desc(Demanda)) |> 
   ggplot() +
-  aes(x = group, y = Demanda) +
-  geom_bar(stat = "identity") +
+  aes(x = reorder(group, Demanda), y = Demanda) +
+  geom_bar(stat = "identity", color = "black", fill = "dodgerblue2") +
   coord_flip() +
+  labs(x = "Grupo de productos", y = "Demanda ($)") +
   theme_bw()
-
-# Grafico que va
-grupo_ganancia <- eci_transactions_stores_prod_sample |>
-  group_by(category) |> 
-  summarise(Margen = sum(margen)) |> 
-  ungroup() |> 
-  print()
-
 
 # Desconectamos spark
 spark_disconnect(sc)
