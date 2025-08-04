@@ -72,6 +72,14 @@ ds %>%
   summarise(cantidad = n()) %>%
   collect()  
 
+valores_extremos_price = ds %>%
+  mutate(q = quantile(PRICE, 0.9999)) %>%
+  filter(PRICE > q) %>%
+  select(QUANTITY, PRICE, TOTAL_SALES) %>%
+  collect()
+
+valores_extremos_price
+
 
 
 stats <- ds %>%
@@ -106,5 +114,6 @@ casos_con_error = ds %>% filter(!is.na(QUANTITY)) %>%
   collect()
 
 casos_con_error # Luego de probar diferentes tolerancias, se llegó a la conclusión de que 
-                # no hay errores de cálculo, los que hay son simplemente errores de redondeo.
+                # no hay errores de cálculo, los resultados distintos se deben a que no se 
+                # utilizan todos los decimales en los resultados presentados.
 
