@@ -70,31 +70,134 @@ Es la base de datos principal en este trabajo, en ella se encuentra información
 
 </details>
 
+
 -   `eci_stores`
 
 Contiene información particular de las distintas tiendas minoristas, en esta base de datos encontramos:
 
--- STORE_ID : id de la tienda.
+<details>
+<summary>📂 Variables</summary>
 
--- BRAND : cadena a la que pertenece la tienda.
+- STORE_ID : id de la tienda.
 
--- STORE_NAME(generalmente formado por BRAND - CITY): nombre de la tienda.
+- BRAND : cadena a la que pertenece la tienda.
 
--- ADRESS1 y ADRESS2: información sobre la dirección de la tienda.
+- STORE_NAME (generalmente formado por BRAND - CITY): nombre de la tienda.
 
--- CITY: ciudad de la tienda.
+- ADRESS1 y ADRESS2: información sobre la dirección de la tienda.
 
--- STATE : estado de la tienda.
+- CITY: ciudad de la tienda.
 
--- ZIP : código postal de la tienda.
+- STATE : estado de la tienda.
 
--- OPENDATE y CLOSEDATE : fecha de inicio y de cierre de la tienda.
+- ZIP : código postal de la tienda.
 
--- STORE_TYPE: tipo de tienda.
+- OPENDATE y CLOSEDATE : fecha de inicio y de cierre de la tienda.
 
--- REGION: región de la tienda.
+- STORE_TYPE: tipo de tienda.
+
+- REGION: región de la tienda.
+
+</details>
+
 
 -   `eci_stores_cluster`
+
+Repite las variables STORE_ID, BRAND y STORE_NAME, y agrega una variable que agrupa las tiendas por zona o región, donde:
+
+<details>
+<summary>📂 Variables</summary>
+
+- STORE_ID : id de la tienda.
+
+- BRAND : cadena a la que pertenece la tienda.
+
+- STORE_NAME (generalmente formado por BRAND - CITY): nombre de la tienda.
+
+- CLUSTER: zona o región de la tienda.
+
+</details>
+
+
+-   `eci_product_master`
+
+Contiene información más específica de los productos como el nombre, el precio inicial, el precio sugerido por el fabricante, los costos del mismo, entre otras: 
+
+<details>
+<summary>📂 Variables</summary>
+
+- SKU: número de referencia CCCGGSSXXX donde C es la categoría, G el grupo, S subgrupo y X es el número secuencial del producto
+
+- PRODUCT_NAME: nombre del producto.
+
+- CATEGORY: categoría del producto.
+
+- GROUP: grupo del producto.
+
+- SUBGROUP: subproducto.
+
+- BRAND: cadena a la que pertenece la tienda.
+
+- base_price: precio al que el negocio puso en venta al producto en primera instancia.
+
+- initial_ticket_price: precio del producto sugerido por el fabricante.
+
+- costos: costo del producto.
+
+</details>
+
+
+- `eci_product_groups`
+
+Identifica productos que han estado en precio promocional por algún motivo:
+
+<details>
+<summary>📂 Variables</summary>
+
+- SKU: número de referencia CCCGGSSXXX donde C es la categoría, G el grupo, S subgrupo y X es el número secuencial del producto
+
+- PRODUCT_NAME: nombre del producto.
+
+- price_group_id: id de la promoción.
+
+- price_group_name: nombre completo de la promoción.
+
+- group_type: tipo de promoción.
+
+</details>
+
+
+-  `eci_customer_data`
+
+Tiene la siguiente información de 801923 clientes:
+
+<details>
+<summary>📂 Variables</summary>
+
+- client_id: id del cliente.	
+
+- phone_number: número del cliente.
+
+- email_address: dirección de email del cliente.
+
+- city: ciudad de residencia del cliente.
+
+- state: estado de residencia del cliente.
+
+- zip_code: codigo postal del lugar de residencia del cliente.
+
+- education_level: nivel de educación del cliente.
+
+- occupation: ocupación del cliente.
+
+- loyalty_member: identifica si el cliente es socio o no de la cadena.	
+
+- loyalty_number: número de socio del cliente en caso de serlo.
+
+- loyalty_points: puntos de membresía del cliente socio. 
+
+</details>
+
 
 ### Validación de datos
 

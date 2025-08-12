@@ -452,21 +452,111 @@ y en cierta fecha.</p></li>
 </ul>
 <p>Contiene información particular de las distintas tiendas minoristas,
 en esta base de datos encontramos:</p>
-<p>– STORE_ID : id de la tienda.</p>
-<p>– BRAND : cadena a la que pertenece la tienda.</p>
-<p>– STORE_NAME(generalmente formado por BRAND - CITY): nombre de la
-tienda.</p>
-<p>– ADRESS1 y ADRESS2: información sobre la dirección de la tienda.</p>
-<p>– CITY: ciudad de la tienda.</p>
-<p>– STATE : estado de la tienda.</p>
-<p>– ZIP : código postal de la tienda.</p>
-<p>– OPENDATE y CLOSEDATE : fecha de inicio y de cierre de la
-tienda.</p>
-<p>– STORE_TYPE: tipo de tienda.</p>
-<p>– REGION: región de la tienda.</p>
+<details>
+<summary>
+📂 Variables
+</summary>
+<ul>
+<li><p>STORE_ID : id de la tienda.</p></li>
+<li><p>BRAND : cadena a la que pertenece la tienda.</p></li>
+<li><p>STORE_NAME (generalmente formado por BRAND - CITY): nombre de la
+tienda.</p></li>
+<li><p>ADRESS1 y ADRESS2: información sobre la dirección de la
+tienda.</p></li>
+<li><p>CITY: ciudad de la tienda.</p></li>
+<li><p>STATE : estado de la tienda.</p></li>
+<li><p>ZIP : código postal de la tienda.</p></li>
+<li><p>OPENDATE y CLOSEDATE : fecha de inicio y de cierre de la
+tienda.</p></li>
+<li><p>STORE_TYPE: tipo de tienda.</p></li>
+<li><p>REGION: región de la tienda.</p></li>
+</ul>
+</details>
 <ul>
 <li><code>eci_stores_cluster</code></li>
 </ul>
+<p>Repite las variables STORE_ID, BRAND y STORE_NAME, y agrega una
+variable que agrupa las tiendas por zona o región, donde:</p>
+<details>
+<summary>
+📂 Variables
+</summary>
+<ul>
+<li><p>STORE_ID : id de la tienda.</p></li>
+<li><p>BRAND : cadena a la que pertenece la tienda.</p></li>
+<li><p>STORE_NAME (generalmente formado por BRAND - CITY): nombre de la
+tienda.</p></li>
+<li><p>CLUSTER: zona o región de la tienda.</p></li>
+</ul>
+</details>
+<ul>
+<li><code>eci_product_master</code></li>
+</ul>
+<p>Contiene información más específica de los productos como el nombre,
+el precio inicial, el precio sugerido por el fabricante, los costos del
+mismo, entre otras:</p>
+<details>
+<summary>
+📂 Variables
+</summary>
+<ul>
+<li><p>SKU: número de referencia CCCGGSSXXX donde C es la categoría, G
+el grupo, S subgrupo y X es el número secuencial del producto</p></li>
+<li><p>PRODUCT_NAME: nombre del producto.</p></li>
+<li><p>CATEGORY: categoría del producto.</p></li>
+<li><p>GROUP: grupo del producto.</p></li>
+<li><p>SUBGROUP: subproducto.</p></li>
+<li><p>BRAND: cadena a la que pertenece la tienda.</p></li>
+<li><p>base_price: precio al que el negocio puso en venta al producto en
+primera instancia.</p></li>
+<li><p>initial_ticket_price: precio del producto sugerido por el
+fabricante.</p></li>
+<li><p>costos: costo del producto.</p></li>
+</ul>
+</details>
+<ul>
+<li><code>eci_product_groups</code></li>
+</ul>
+<p>Identifica productos que han estado en precio promocional por algún
+motivo:</p>
+<details>
+<summary>
+📂 Variables
+</summary>
+<ul>
+<li><p>SKU: número de referencia CCCGGSSXXX donde C es la categoría, G
+el grupo, S subgrupo y X es el número secuencial del producto</p></li>
+<li><p>PRODUCT_NAME: nombre del producto.</p></li>
+<li><p>price_group_id: id de la promoción.</p></li>
+<li><p>price_group_name: nombre completo de la promoción.</p></li>
+<li><p>group_type: tipo de promoción.</p></li>
+</ul>
+</details>
+<ul>
+<li><code>eci_customer_data</code></li>
+</ul>
+<p>Tiene la siguiente información de 801923 clientes:</p>
+<details>
+<summary>
+📂 Variables
+</summary>
+<ul>
+<li><p>client_id: id del cliente.</p></li>
+<li><p>phone_number: número del cliente.</p></li>
+<li><p>email_address: dirección de email del cliente.</p></li>
+<li><p>city: ciudad de residencia del cliente.</p></li>
+<li><p>state: estado de residencia del cliente.</p></li>
+<li><p>zip_code: codigo postal del lugar de residencia del
+cliente.</p></li>
+<li><p>education_level: nivel de educación del cliente.</p></li>
+<li><p>occupation: ocupación del cliente.</p></li>
+<li><p>loyalty_member: identifica si el cliente es socio o no de la
+cadena.</p></li>
+<li><p>loyalty_number: número de socio del cliente en caso de
+serlo.</p></li>
+<li><p>loyalty_points: puntos de membresía del cliente socio.</p></li>
+</ul>
+</details>
 </div>
 <div id="validación-de-datos" class="section level3">
 <h3>Validación de datos</h3>
