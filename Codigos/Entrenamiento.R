@@ -5,19 +5,19 @@ library(dbplot)
 library(lubridate)
 library(rlang)
 library(tidyr)
+library(arrow)
 library(sparkxgb)
 
 # Configuraciones de spark
 config <- spark_config()
-config$spark.driver.memory <- "8g"
-config$spark.executor.instances <- 4
-config$spark.executor.memory <- "4g"
-config$spark.executor.cores <- 2
-config$spark.storage.memoryFraction <- 0.8
-config$spark.memory.fraction <- 0.7
-config$spark.memory.storageFraction <- 0.6
-config$`spark.network.timeout` <- "600s"
-config$`spark.sql.shuffle.partitions` <- 200
+# Driver (R) -> Spark
+config$spark.driver.memory <- "2g"
+config$spark.driver.memoryOverhead <- "512m"
+config$spark.executor.instances <- 2     # Máximo 2 instancias en local
+config$spark.executor.memory <- "2g"
+config$spark.executor.memoryOverhead <- "512m"
+config$spark.executor.cores <- 2         # Aprovecha CPU sin saturar RAM
+config$spark.sql.shuffle.partitions <- 50
 
 # Establecemos la coneccion con spark
 sc <- spark_connect(master = "local", config = config)
@@ -53,10 +53,17 @@ eci_product_master_totales <- eci_product_master
 eci_product_master_totales <- eci_product_master_totales |> rename(SKU = sku, SUBGROUP = subgroup, brand_prod = brand)
 df_product_master <- eci_product_master_totales |> collect()
 
+# Grupo de productos con maestro de productos
+product_join <- eci_product_master |> 
+  left_join(eci_product_groups, by = c("sku", "product_name")) |> 
+  collect()
+
+
 # Imposible diferenciar los subgrupos de Baseball y Basketball, una alternativa es suponer que tienen demanda similar
 # e imputar los resultados del basket con los del baseball
+
 df_product_master |> 
-  filter(SKU %in% c("SPOTEBA001", "SPOTEBA002", "SPOTEBA003", "SPOTEBA004", "SPOTEBA005", "SPOTEBA006", "SPOTEBA007")) |> 
+  filter(SKU %in% c("SPOTEBA001", "SPOTEBA002", "SPOTEBA003", "SPOTEBA004", "SPOTEBA005", "SPOTEBA006", "SPOTEBA007", "SPOTEBA008")) |> 
   group_by(SUBGROUP) |> 
   summarise(base_price_avg = mean(base_price),
             initial_ticket_price_avg = mean(base_price),
@@ -92,11 +99,13 @@ eci_transactions_stores_prod <- eci_transactions_stores_prod |>
 # Otra forma de modelar los datos, no por transaccion individual, sino agrupada por tienda, subgrupo y dia
 datos_otra_forma <- eci_transactions_stores_prod |> 
   mutate(QUANTITY = TOTAL_SALES/PRICE) |> 
-  group_by(STORE_SUBGROUP_DATE_ID) |> 
+  group_by(STORE_SUBGROUP_DATE_ID, category, group) |> 
   summarise(TOTAL_SALES_ = sum(TOTAL_SALES),
             QUANTITY_ = sum(QUANTITY),
             PRICE_ = sum(PRICE),
-            base_price_ = sum(base_price)
+            base_price_ = sum(base_price),
+            costos_ = sum(costos), 
+            initial_ticket_price_ = sum(initial_ticket_price)
             ) |> 
   ungroup() |>
   mutate(STORE_SUBGROUP_DATE_ID_2 = STORE_SUBGROUP_DATE_ID) |> 
@@ -104,9 +113,23 @@ datos_otra_forma <- eci_transactions_stores_prod |>
 
 datos_otra_forma <- datos_otra_forma |> 
   left_join(eci_stores_clusters_join, by = "STORE_ID") |>
-  select(!c(ADDRESS1, ADDRESS2, CITY, STATE, ZIP, OPENDATE, CLOSEDATE, STORE_TYPE, CLUSTER)) |> 
+  select(!c(ADDRESS1, ADDRESS2, STATE, ZIP, OPENDATE, CLOSEDATE, STORE_TYPE, CLUSTER)) |> 
   mutate(mes = month(as_date(DATE_ID)),
          dia = day(as_date(DATE_ID)))
+
+# Obtenemos la media y el desvio de PRICE_
+
+price_media_sd <- datos_otra_forma |> 
+  summarise(
+    price_mean = mean(PRICE_),
+    price_sd = sd(PRICE_)
+  ) |> 
+  collect()
+
+# Estandarizamos la variable
+datos_otra_forma <- datos_otra_forma |> 
+  mutate(PRICE_est = ((PRICE_ - !!price_media_sd$price_mean) / !!price_media_sd$price_sd))
+
 
 prom_dia_mes <- datos_otra_forma |> 
   mutate(dia = day(as_date(DATE_ID))) |>
@@ -126,19 +149,26 @@ kfold_2 <- sdf_random_split(datos_otra_forma,
 train_set_2 <- do.call(rbind, kfold_2[2:5])
 validation_set_2 <- kfold_2[[1]]
 
+
+cant_stores_subg <- datos_otra_forma |> 
+  group_by(STORE_ID, SUBGROUP) |> 
+  summarise(quant = sum(QUANTITY_)) |> 
+  collect()
+
 # # Entrenamiento de los modelos
 # rf_model <- ml_random_forest_regressor(train_set_2, 
 #                                        TOTAL_SALES_ ~ PRICE_ + base_price_ + QUANTITY_ + SUBGROUP + REGION + STORE_ID + mes +
 #                                        SUBGROUP:PRICE_ + STORE_ID:PRICE_ + mes:PRICE_,
 #                                        num_trees = 100, max_depth = 10)
 
-reg_lin <- ml_linear_regression(train_set_2, 
-                                TOTAL_SALES_ ~ PRICE_ + base_price_ + QUANTITY_ + SUBGROUP + REGION + STORE_ID + mes +
-                                  SUBGROUP:PRICE_ + STORE_ID:PRICE_ + mes:PRICE_)
-
 rf_model <- ml_random_forest_regressor(train_set_2,
-                                       TOTAL_SALES_ ~ PRICE_ + QUANTITY_ + SUBGROUP + REGION + STORE_ID + mes + dia,
-                                       num_trees = 300)
+                                       TOTAL_SALES_ ~ PRICE_ + SUBGROUP + REGION + STORE_ID + mes + dia + category + group,
+                                       num_trees = 120, max_depth = 5, max_bins = 48, min_instances_per_node = 5, 
+                                       seed = 200, subsampling_rate = 0.8, feature_subset_strategy = "onethird")
+
+rf_model_definitivo <- ml_random_forest_regressor(datos_otra_forma,
+                                                  TOTAL_SALES_ ~ PRICE_ + QUANTITY_ + SUBGROUP + BRAND + REGION + STORE_ID + mes + dia,
+                                                  num_trees = 105, max_depth = 6, max_bins = 64)
 
 xgb_model <- xgboost_regressor(train_set_2,
                                TOTAL_SALES_ ~ PRICE_ + QUANTITY_ + SUBGROUP + REGION + STORE_ID + mes + dia,
@@ -172,6 +202,11 @@ predicciones_train_rf <- rf_model |>
   select(TOTAL_SALES_, prediction, starts_with("probability_")) |> 
   glimpse()
 
+predicciones_rf_def_train <- rf_model_definitivo |> 
+  ml_predict(datos_otra_forma) |> 
+  select(TOTAL_SALES_, prediction, starts_with("probability_")) |> 
+  glimpse()
+
 
 r2 <- ml_regression_evaluator(predicciones_rf, 
                               label_col = "TOTAL_SALES_", 
@@ -181,10 +216,9 @@ r2 <- ml_regression_evaluator(predicciones_rf,
 mae <- ml_regression_evaluator(predicciones_rf, 
                                label_col = "TOTAL_SALES_", 
                                prediction_col = "prediction",
-                               metric_name = "mape")
+                               metric_name = "mae")
 
 mape <- predicciones_rf |> 
-  filter(TOTAL_SALES_ != 0) |>   # Avoid division by zero
   mutate(
     abs_pct_error = abs((TOTAL_SALES_ - prediction) / TOTAL_SALES_)
   ) |> 
@@ -195,12 +229,10 @@ mape <- predicciones_rf |>
 
 # Preparacion de los datos para el entrenamiento del modelo
 datos_entrenamiento <- eci_transactions_stores_prod |> 
-  # mutate(STORE_ID = factor(STORE_ID),
-  #        SUBGROUP = factor(SUBGROUP),
-  #        BRAND = factor(BRAND),
-  #        STORE_TYPE = factor(STORE_TYPE),
-  #        REGION = factor(REGION)) |> 
-  select(c(STORE_ID, PRICE, TOTAL_SALES, SUBGROUP, BRAND, STORE_TYPE, REGION, mes, base_price))
+  mutate(mes = as.character(mes),
+         dia = day(DATE),
+         QUANTITY = TOTAL_SALES/PRICE) |> 
+  select(c(STORE_ID, PRICE, TOTAL_SALES, QUANTITY, SUBGROUP, BRAND, STORE_TYPE, REGION, mes, dia, costos, initial_ticket_price))
 
 # Definimos los 10 folds para la validacion cruzada
 kfold <- sdf_random_split(datos_entrenamiento,
@@ -209,19 +241,21 @@ kfold <- sdf_random_split(datos_entrenamiento,
 
 # Separacion entre train y test
 train_set <- do.call(rbind, kfold[2:5])
+
 validation_set <- kfold[[1]]
 
 # Ajustamos xgboost a los datos
 xgb_model <- xgboost_regressor(train_set, 
-                               TOTAL_SALES ~ PRICE + base_price + SUBGROUP + REGION + BRAND + mes) # Parametro por defecto
+                               TOTAL_SALES ~ PRICE + SUBGROUP + REGION + BRAND + mes + dia,
+                               num_workers = 4) # Parametro por defecto
 
 reg_lineal <- ml_linear_regression(train_set, 
-                                   TOTAL_SALES ~ PRICE + base_price + SUBGROUP + REGION + BRAND + mes)
+                                   TOTAL_SALES ~ PRICE + SUBGROUP + STORE_ID + REGION + BRAND + mes)
 
 rf_model <- ml_random_forest_regressor(train_set, 
-                                       TOTAL_SALES ~ PRICE + base_price + SUBGROUP + REGION + STORE_ID + mes +
-                                         SUBGROUP:PRICE + STORE_ID:PRICE,
-                                       num_trees = 150, max_depth = 8)
+                                       TOTAL_SALES ~ PRICE + SUBGROUP + REGION + STORE_ID + costos + initial_ticket_price + mes,
+                                       num_trees = 100, max_depth = 7, max_bins = 32, min_instances_per_node = 5, 
+                                       seed = 200, subsampling_rate = 0.8, feature_subset_strategy = "onethird")
 
 predicciones <- reg_lineal |> 
   ml_predict(validation_set) |> 
@@ -288,21 +322,248 @@ x <- ids_test_stores_join |>
   left_join(store_faltante, by = "st_sub2")
 
 # Prueba de los modelos para subir a kaggle
-ids_test_sep <- ids_test |> 
-  mutate(STORE_SUBGROUP_DATE_ID_2 = STORE_SUBGROUP_DATE_ID) |> 
-  separate(STORE_SUBGROUP_DATE_ID_2, into = c("STORE_ID", "SUBGROUP", "DATE_ID"), sep = "_")
 
-ids_test_sep <- ids_test_sep |> 
-  left_join(eci_stores_clusters_join |> collect(), by = "STORE_ID") |> 
-  select(!c(BRAND, STORE_NAME, ADDRESS1, ADDRESS2, CITY, STATE, ZIP, OPENDATE, CLOSEDATE, STORE_TYPE, CLUSTER)) |> 
-  mutate(mes = month(as_date(DATE_ID)),
-         dia = day(as_date(DATE_ID)))
 
 ids_test_sep_bask <- ids_test_sep |> filter(SUBGROUP == "Basketball")
 ids_test_sep_sin_bask <- ids_test_sep |> filter(SUBGROUP != "Basketball")
 
+# ids_test_sep_sin_bask <- ids_test_sep_sin_bask |> 
+#   left_join(prom_dia_mes, by = c("dia", "mes", "STORE_ID", "SUBGROUP")) |> 
+#   mutate(PRICE_avg = ifelse(is.na(PRICE_avg), 0, PRICE_avg),
+#          QUANTITY_avg = ifelse(is.na(QUANTITY_avg), 0, QUANTITY_avg))
+
+# Prueba de predicciones
 ids_test_sep_sin_bask <- ids_test_sep_sin_bask |> 
-  left_join(prom_dia_mes, by = c("dia", "mes", "STORE_ID", "SUBGROUP")) |> 
-  mutate(PRICE_avg = ifelse(is.na(PRICE_avg), 0, PRICE_avg),
-         QUANTITY_avg = ifelse(is.na(QUANTITY_avg), 0, QUANTITY_avg))
+  rename(PRICE_ = PRICE_avg, QUANTITY_ = QUANTITY_avg)
+ids_test_sep_sin_bask <- sparklyr::copy_to(sc, ids_test_sep_sin_bask, overwrite = T)
+
+predicciones_finales <- rf_model |> 
+  ml_predict(ids_test_sep_sin_bask) |> 
+  select(prediction, starts_with("probability_")) |> 
+  collect()
+
+ids_test_sep_sin_bask <- ids_test_sep_sin_bask |> 
+  collect() |> 
+  mutate(TOTAL_SALES_ = predicciones_finales$prediction)
+
+basket <- ids_test_sep_bask |> 
+  left_join(ids_test_sep_sin_bask |> 
+              filter(SUBGROUP == "Baseball"), by = c("STORE_ID", "DATE_ID")) |> 
+  select(STORE_SUBGROUP_DATE_ID.x, TOTAL_SALES_) |>
+  rename(STORE_SUBGROUP_DATE_ID = STORE_SUBGROUP_DATE_ID.x,
+         TOTAL_SALES = TOTAL_SALES_) |> 
+  mutate(TOTAL_SALES = TOTAL_SALES * 0.5)
+
+baseball <- ids_test_sep_sin_bask |> 
+  filter(SUBGROUP == "Baseball") |> 
+  mutate(TOTAL_SALES = TOTAL_SALES_ * 0.5) |> 
+  select(STORE_SUBGROUP_DATE_ID, TOTAL_SALES)
+
+ids_sin_bask_base <- ids_test_sep_sin_bask |> 
+  filter(SUBGROUP != "Baseball") |> 
+  filter(SUBGROUP != "Basketball") |> 
+  rename(TOTAL_SALES = TOTAL_SALES_) |> 
+  select(STORE_SUBGROUP_DATE_ID, TOTAL_SALES)
+
+ids_test_prueba <- rbind(ids_sin_bask_base, basket, baseball)
+
+
+predicciones_finales <- ids_test |> 
+  left_join(ids_test_prueba, by = "STORE_SUBGROUP_DATE_ID") |> 
+  mutate(TOTAL_SALES = round(TOTAL_SALES))
+
+############# Predicciones del modelo, manteniendo el mismo comportamiento en el precio que el 2023
+ids_test_sep <- ids_test |> 
+  mutate(STORE_SUBGROUP_DATE_ID_2 = STORE_SUBGROUP_DATE_ID) |> 
+  separate(STORE_SUBGROUP_DATE_ID_2, into = c("STORE_ID", "SUBGROUP", "DATE_ID"), sep = "_") |> 
+  mutate(DATE_ID = as_date(DATE_ID))
+
+ids_test_sep <- ids_test_sep |> 
+  left_join(eci_stores_clusters_join |> collect(), by = "STORE_ID") |> 
+  select(!c(BRAND, STORE_NAME, ADDRESS1, ADDRESS2, CITY, STATE, ZIP, OPENDATE, CLOSEDATE, STORE_TYPE, CLUSTER)) |> 
+  mutate(mes = lubridate::month(DATE_ID),
+         dia = lubridate::day(DATE_ID))
+
+ultimo_precio <- datos_otra_forma |> 
+  mutate(DATE_ID = as_date(DATE_ID)) |> 
+  group_by(SUBGROUP, STORE_ID, category, group) |> 
+  filter(DATE_ID == max(DATE_ID)) |> 
+  select(SUBGROUP, STORE_ID, DATE_ID, BRAND, PRICE_, costos_, initial_ticket_price_) |> 
+  ungroup() |> 
+  collect()
+
+ultimo_precio_est <- ultimo_precio |> 
+  summarise(precio_mean = mean(PRICE_),
+            precio_sd = sd(PRICE_))
+
+ultimo_precio <- ultimo_precio |> 
+  mutate(PRICE_est = (PRICE_ - !!ultimo_precio_est$precio_mean)/!!ultimo_precio_est$precio_sd)
+
+
+ids_test_sep_mismo_precio_sin_bask_base <- ids_test_sep |> 
+  filter(SUBGROUP != "Basketball") |> 
+  filter(SUBGROUP != "Baseball") |> 
+  left_join(ultimo_precio, by = c("STORE_ID", "SUBGROUP")) |> 
+  select(-c(DATE_ID.y)) |> 
+  rename(DATE_ID = DATE_ID.x) |> 
+  mutate(dia = lubridate::day(DATE_ID))
+
+ids_test_sep_mismo_precio_bask <- ids_test_sep |> 
+  filter(SUBGROUP == "Basketball") |> 
+  left_join((ultimo_precio |> filter(SUBGROUP == "Baseball")), by = c("STORE_ID")) |> 
+  select(-c(DATE_ID.y, SUBGROUP.y)) |> 
+  rename(SUBGROUP = SUBGROUP.x, DATE_ID = DATE_ID.x) |> 
+  mutate(PRICE_ = PRICE_ * 0.5) |> 
+  mutate(dia = lubridate::day(DATE_ID))
+
+ids_test_sep_mismo_precio_base <- ids_test_sep |> 
+  filter(SUBGROUP == "Baseball") |> 
+  left_join((ultimo_precio |> filter(SUBGROUP == "Baseball")), by = c("STORE_ID")) |> 
+  select(-c(DATE_ID.y, SUBGROUP.y)) |> 
+  rename(SUBGROUP = SUBGROUP.x, DATE_ID = DATE_ID.x) |> 
+  mutate(PRICE_ = PRICE_ * 0.5) |> 
+  mutate(dia = lubridate::day(DATE_ID))
+
+ids_test_sep_mismo_precio_sin_bask_base <- ids_test_sep_mismo_precio_sin_bask_base |> 
+  left_join(prom_dia_mes, by = c("STORE_ID", "SUBGROUP", "dia")) |> 
+  select(STORE_SUBGROUP_DATE_ID, STORE_ID, SUBGROUP, DATE_ID, BRAND, REGION, mes.x, dia, PRICE_, QUANTITY_avg, costos_, initial_ticket_price_, PRICE_est, category, group) |> 
+  mutate(QUANTITY_ = ifelse(is.na(QUANTITY_avg), 0, round(QUANTITY_avg))) |> 
+  rename(mes = mes.x) |> 
+  select(-c(QUANTITY_avg))
+
+ids_test_sep_mismo_precio_base <- ids_test_sep_mismo_precio_base |> 
+  left_join(prom_dia_mes, by = c("STORE_ID", "SUBGROUP", "dia")) |> 
+  select(STORE_SUBGROUP_DATE_ID, STORE_ID, SUBGROUP, DATE_ID, BRAND, REGION, mes.x, dia, PRICE_, QUANTITY_avg, costos_, initial_ticket_price_, PRICE_est, category, group) |> 
+  rename(mes = mes.x) |> 
+  mutate(QUANTITY_ = ifelse(is.na(QUANTITY_avg), 0, round(QUANTITY_avg/2))) |> 
+  select(-c(QUANTITY_avg))
+
+ids_test_sep_mismo_precio <- rbind(ids_test_sep_mismo_precio_sin_bask_base, ids_test_sep_mismo_precio_base)
+
+ids_predicciones_sin_bask <- sparklyr::copy_to(sc, ids_test_sep_mismo_precio, overwrite = TRUE)
+
+predicciones_ids_sin_bask <- rf_model |> 
+  ml_predict(ids_predicciones_sin_bask) |> 
+  select(STORE_SUBGROUP_DATE_ID, SUBGROUP, STORE_ID, prediction, dia, starts_with("probability_")) |> 
+  rename(TOTAL_SALES = prediction) |> 
+  collect()
+
+predicciones_ids_baseball <- predicciones_ids_sin_bask |> 
+  filter(SUBGROUP == "Baseball") |> 
+  mutate(TOTAL_SALES = TOTAL_SALES)
+
+predicciones_ids_bask <- ids_test_sep_mismo_precio_bask |> 
+  left_join(predicciones_ids_baseball, by = c("STORE_ID", "dia")) |> 
+  select(STORE_SUBGROUP_DATE_ID.x, STORE_ID, SUBGROUP.x, dia, TOTAL_SALES) |> 
+  rename(STORE_SUBGROUP_DATE_ID = STORE_SUBGROUP_DATE_ID.x, SUBGROUP = SUBGROUP.x)
+
+predicciones_ids_sin_bask_base <- predicciones_ids_sin_bask |> 
+  filter(SUBGROUP != "Basketball") |> 
+  filter(SUBGROUP != "Baseball")
+
+predicciones_ids_completa <- rbind(predicciones_ids_sin_bask_base, predicciones_ids_baseball, predicciones_ids_bask)
+predicciones_ids_completa <- predicciones_ids_completa |> 
+  select(STORE_SUBGROUP_DATE_ID, TOTAL_SALES) |>
+  mutate(TOTAL_SALES = TOTAL_SALES)
+
+predicciones_finales <- ids_test |> left_join(predicciones_ids_completa, by = "STORE_SUBGROUP_DATE_ID")
+
+### Guardamos las predicciones en un csv
+write.csv(predicciones_finales, "predicciones_finales_v13.csv", row.names = FALSE, quote = FALSE)
+
+######### Predicciones de Kaggle pero usando el precio promedio de cada producto en el ultimo mes
+
+# Usar el precio promedio del ultimo mes
+ids_test_sep <- ids_test |> 
+  mutate(STORE_SUBGROUP_DATE_ID_2 = STORE_SUBGROUP_DATE_ID) |> 
+  separate(STORE_SUBGROUP_DATE_ID_2, into = c("STORE_ID", "SUBGROUP", "DATE_ID"), sep = "_") |> 
+  mutate(DATE_ID = as_date(DATE_ID))
+
+ids_test_sep <- ids_test_sep |> 
+  left_join(eci_stores_clusters_join |> collect(), by = "STORE_ID") |> 
+  select(!c(STORE_NAME, ADDRESS1, ADDRESS2, CITY, STATE, ZIP, OPENDATE, CLOSEDATE, STORE_TYPE, CLUSTER)) |> 
+  mutate(mes = lubridate::month(DATE_ID),
+         dia = lubridate::day(DATE_ID))
+
+precio_promedio <- datos_otra_forma |> 
+  mutate(DATE_ID = as_date(DATE_ID)) |> 
+  filter(DATE_ID >= "2023-12-01") |> 
+  group_by(SUBGROUP, STORE_ID, category, group) |> 
+  summarise(PRICE_ = mean(PRICE_)) |> 
+  ungroup() |> 
+  collect()
+
+precio_mediano <- datos_otra_forma |> 
+  mutate(DATE_ID = as_date(DATE_ID)) |> 
+  filter(DATE_ID >= "2023-12-01") |> 
+  group_by(SUBGROUP, STORE_ID, category, group) |> 
+  summarise(PRICE_ = dplyr::sql("percentile_approx(PRICE_, 0.5)")) |> 
+  ungroup() |> 
+  collect()
+
+ids_test_sep_mismo_precio_sin_bask_base <- ids_test_sep |> 
+  filter(SUBGROUP != "Basketball") |> 
+  filter(SUBGROUP != "Baseball") |> 
+  left_join(precio_mediano, by = c("STORE_ID", "SUBGROUP")) |> 
+  mutate(dia = lubridate::day(DATE_ID))
+
+ids_test_sep_mismo_precio_bask <- ids_test_sep |> 
+  filter(SUBGROUP == "Basketball") |> 
+  left_join((precio_mediano |> filter(SUBGROUP == "Baseball")), by = c("STORE_ID")) |> 
+  select(-c(SUBGROUP.y)) |> 
+  rename(SUBGROUP = SUBGROUP.x) |> 
+  mutate(PRICE_ = PRICE_ * 0.5) |> 
+  mutate(dia = lubridate::day(DATE_ID))
+
+ids_test_sep_mismo_precio_base <- ids_test_sep |> 
+  filter(SUBGROUP == "Baseball") |> 
+  left_join((precio_mediano |> filter(SUBGROUP == "Baseball")), by = c("STORE_ID")) |> 
+  select(-c(SUBGROUP.y)) |> 
+  rename(SUBGROUP = SUBGROUP.x) |> 
+  mutate(PRICE_ = PRICE_ * 0.5) |> 
+  mutate(dia = lubridate::day(DATE_ID))
+
+ids_test_sep_mismo_precio_sin_bask_base <- ids_test_sep_mismo_precio_sin_bask_base |> 
+  left_join(prom_dia_mes, by = c("STORE_ID", "SUBGROUP", "dia")) |> 
+  select(STORE_SUBGROUP_DATE_ID, STORE_ID, SUBGROUP, DATE_ID, REGION, mes.x, dia, PRICE_, QUANTITY_avg, category, group, BRAND) |> 
+  mutate(QUANTITY_ = ifelse(is.na(QUANTITY_avg), 0, round(QUANTITY_avg))) |>
+  rename(mes = mes.x)
+
+ids_test_sep_mismo_precio_base <- ids_test_sep_mismo_precio_base |> 
+  left_join(prom_dia_mes, by = c("STORE_ID", "SUBGROUP", "dia")) |> 
+  select(STORE_SUBGROUP_DATE_ID, STORE_ID, SUBGROUP, DATE_ID, REGION, mes.x, dia, PRICE_, QUANTITY_avg, category, group, BRAND) |> 
+  mutate(QUANTITY_ = ifelse(is.na(QUANTITY_avg), 0, round(QUANTITY_avg))) |>
+  rename(mes = mes.x)
+
+ids_test_sep_mismo_precio <- rbind(ids_test_sep_mismo_precio_sin_bask_base, ids_test_sep_mismo_precio_base)
+
+ids_predicciones_sin_bask <- sparklyr::copy_to(sc, ids_test_sep_mismo_precio, overwrite = TRUE)
+
+predicciones_ids_sin_bask <- rf_model |> 
+  ml_predict(ids_predicciones_sin_bask) |> 
+  select(STORE_SUBGROUP_DATE_ID, SUBGROUP, STORE_ID, prediction, QUANTITY_, dia, starts_with("probability_")) |> 
+  rename(TOTAL_SALES = prediction) |> 
+  collect()
+
+predicciones_ids_baseball <- predicciones_ids_sin_bask |> 
+  filter(SUBGROUP == "Baseball")
+
+predicciones_ids_bask <- ids_test_sep_mismo_precio_bask |> 
+  left_join(predicciones_ids_baseball, by = c("STORE_ID", "dia")) |> 
+  select(STORE_SUBGROUP_DATE_ID.x, STORE_ID, SUBGROUP.x, QUANTITY_, dia, TOTAL_SALES) |> 
+  rename(STORE_SUBGROUP_DATE_ID = STORE_SUBGROUP_DATE_ID.x, SUBGROUP = SUBGROUP.x)
+
+predicciones_ids_sin_bask_base <- predicciones_ids_sin_bask |> 
+  filter(SUBGROUP != "Basketball") |> 
+  filter(SUBGROUP != "Baseball")
+
+predicciones_ids_completa <- rbind(predicciones_ids_sin_bask_base, predicciones_ids_baseball, predicciones_ids_bask)
+predicciones_ids_completa <- predicciones_ids_completa |> 
+  select(STORE_SUBGROUP_DATE_ID, TOTAL_SALES) |>
+  mutate(TOTAL_SALES = TOTAL_SALES)
+
+predicciones_finales <- ids_test |> left_join(predicciones_ids_completa, by = "STORE_SUBGROUP_DATE_ID")
+
+### Guardamos las predicciones en un csv
+write.csv(predicciones_finales, "Predicciones/predicciones_finales_v19.csv", row.names = FALSE, quote = FALSE)
 
