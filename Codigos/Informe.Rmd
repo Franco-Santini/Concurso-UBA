@@ -1,0 +1,204 @@
+---
+title: "Informe concurso AsterionHouse"
+author: "Gazze Simón, Moresi Manuel, Santini Franco"
+date: "2025-08-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# La Casa de Asterión: estimación de demanda y optimización de precios de artículos de venta minorista
+
+## Introducción
+
+La empresa *La Casa de Asterión* es una cadena de negocios minoristas de artículos para el hogar, la cual cuenta con 15 tiendas en distintas regiones de Estados Unidos. Recientemente dicha empresa ha detectado una reducción en las ganancias y buscan evaluar y mejorar su estrategia de precios para aumentar el rendimiento.
+
+![](data:image/jpeg;base64,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)
+
+Teniendo en cuenta que la fijación de precios es un factor clave para el rendimiento de cualquier negocio. Un precio demasiado alto puede reducir el volumen de ventas, mientras que uno demasiado bajo puede disminuir el margen de ganancia, incluso si la demanda aumenta. Encontrar el punto de equilibrio adecuado requiere no solo un análisis detallado de las ventas y de la elasticidad de la demanda, sino también la consideración de factores externos como la competencia, la estacionalidad y los cambios en las preferencias de los consumidores.
+
+Se busca comprender a fondo la relación entre sus precios, la demanda y otros factores que puedan influir en su rendimiento, con el objetivo de implementar una estrategia de precios más eficiente y orientada a resultados.
+
+Se trabajará con información proveniente de las transacciones realizadas en 9 cadenas de negocios minoristas, entre las que se encuentra nuestro cliente *La casa de Asterion*, en un periodo de 3 años, donde se podrá obtener información de cada uno de los negocios y diferentes características relacionadas al producto que se vende.
+
+**Aclaración**: cuando se habla de transacción no refiere al evento completo de la compra, sino a la cantidad de productos iguales dentro de una compra.
+
+## Objetivos
+
+A lo largo de este trabajo tendremos en cuenta 2 objetivos principales:
+
+1)  *Predecir la demanda diaria de la semana siguiente a la finalización de los datos disponibles*.
+
+En base a la información prevista de las transacciones, se busca generar un modelo predictivo con el cual se pueda estimar de manera adecuada la demanda en pesos (\$) para cada uno de los días en la semana posterior al fin de los datos (desde el 1/1/2024 al 7/1/2024) de los distintos subproductos, en cada una de las tiendas minoristas.
+
+2)  *Proponer soluciones para maximizar la ganancia*.
+
+Como ya se mencionó anteriormente, la cadena *Casa de Asterión* presentó una disminución de las ganancias en el último tiempo. Por lo que se busca identificar, para cada subgrupo de productos, el precio óptimo que maximice la ganancia, equilibrando el ingreso por unidad vendida con el volumen total de ventas y de esta manera poder revertir la situación.
+
+## Metodología
+
+### Datos
+
+Se cuenta con 6 bases de datos con distinta información relevante para el trabajo, las siguientes son:
+
+-   `eci_transaction`
+
+Es la base de datos principal en este trabajo, en ella se encuentra información referida a las transacciones realizadas desde el 1 de enero de 2021 hasta el 31 de diciembre de 2023, en las 157 tiendas minoristas presentes en el estudio (pertenecientes a las 9 cadenas ya mencionadas). Las variables aquí presentes son:
+
+<details>
+<summary>📂 Variables</summary>
+
+- TRANSACTION_ID : id de la transacción
+
+- DATE : fecha de la transacción
+
+- STORE_ID : id de la tienda
+
+- SKU: número de referencia CCCGGSSXXX donde C es la categoría, G el grupo, S subgrupo y X es el número secuencial del producto
+
+- QUANTITY: cantidad de productos que se vendieron en esa transacción.
+
+- PRICE: precio del producto.
+
+- TOTAL_SALES (PRICE x QUANTITY): dinero que recibe el local en una transacción.
+
+- SUBGROUP: subproducto.
+
+- STORE_SUBGROUP_DATE_ID: es el id del subproducto en cierta tienda y en cierta fecha.
+
+</details>
+
+
+-   `eci_stores`
+
+Contiene información particular de las distintas tiendas minoristas, en esta base de datos encontramos:
+
+<details>
+<summary>📂 Variables</summary>
+
+- STORE_ID : id de la tienda.
+
+- BRAND : cadena a la que pertenece la tienda.
+
+- STORE_NAME (generalmente formado por BRAND - CITY): nombre de la tienda.
+
+- ADRESS1 y ADRESS2: información sobre la dirección de la tienda.
+
+- CITY: ciudad de la tienda.
+
+- STATE : estado de la tienda.
+
+- ZIP : código postal de la tienda.
+
+- OPENDATE y CLOSEDATE : fecha de inicio y de cierre de la tienda.
+
+- STORE_TYPE: tipo de tienda.
+
+- REGION: región de la tienda.
+
+</details>
+
+
+-   `eci_stores_cluster`
+
+Repite las variables STORE_ID, BRAND y STORE_NAME, y agrega una variable que agrupa las tiendas por zona o región, donde:
+
+<details>
+<summary>📂 Variables</summary>
+
+- STORE_ID : id de la tienda.
+
+- BRAND : cadena a la que pertenece la tienda.
+
+- STORE_NAME (generalmente formado por BRAND - CITY): nombre de la tienda.
+
+- CLUSTER: zona o región de la tienda.
+
+</details>
+
+
+-   `eci_product_master`
+
+Contiene información más específica de los productos como el nombre, el precio inicial, el precio sugerido por el fabricante, los costos del mismo, entre otras: 
+
+<details>
+<summary>📂 Variables</summary>
+
+- SKU: número de referencia CCCGGSSXXX donde C es la categoría, G el grupo, S subgrupo y X es el número secuencial del producto
+
+- PRODUCT_NAME: nombre del producto.
+
+- CATEGORY: categoría del producto.
+
+- GROUP: grupo del producto.
+
+- SUBGROUP: subproducto.
+
+- BRAND: cadena a la que pertenece la tienda.
+
+- base_price: precio al que el negocio puso en venta al producto en primera instancia.
+
+- initial_ticket_price: precio del producto sugerido por el fabricante.
+
+- costos: costo del producto.
+
+</details>
+
+
+- `eci_product_groups`
+
+Identifica productos que han estado en precio promocional por algún motivo:
+
+<details>
+<summary>📂 Variables</summary>
+
+- SKU: número de referencia CCCGGSSXXX donde C es la categoría, G el grupo, S subgrupo y X es el número secuencial del producto
+
+- PRODUCT_NAME: nombre del producto.
+
+- price_group_id: id de la promoción.
+
+- price_group_name: nombre completo de la promoción.
+
+- group_type: tipo de promoción.
+
+</details>
+
+
+-  `eci_customer_data`
+
+Tiene la siguiente información de 801923 clientes:
+
+<details>
+<summary>📂 Variables</summary>
+
+- client_id: id del cliente.	
+
+- phone_number: número del cliente.
+
+- email_address: dirección de email del cliente.
+
+- city: ciudad de residencia del cliente.
+
+- state: estado de residencia del cliente.
+
+- zip_code: codigo postal del lugar de residencia del cliente.
+
+- education_level: nivel de educación del cliente.
+
+- occupation: ocupación del cliente.
+
+- loyalty_member: identifica si el cliente es socio o no de la cadena.	
+
+- loyalty_number: número de socio del cliente en caso de serlo.
+
+- loyalty_points: puntos de membresía del cliente socio. 
+
+</details>
+
+
+### Validación de datos
+
+### Técnicas estadísticas
