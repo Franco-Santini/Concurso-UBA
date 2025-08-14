@@ -7,18 +7,19 @@ library(ggplot2)
 library(data.table)
 library(arrow)
 library(readr)
+library(kableExtra)
 
-# Configuraciones de spark
-#config <- spark_config()
-#config$spark.driver.memory <- "8g"
-#config$spark.executor.instances <- 4
-#config$spark.executor.memory <- "4g"
-#config$spark.executor.cores <- 2
-#config$spark.storage.memoryFraction <- 0.8
-#config$spark.memory.fraction <- 0.7
-#config$spark.memory.storageFraction <- 0.6
-#config$`spark.network.timeout` <- "600s"
-#config$`spark.sql.shuffle.partitions` <- 200
+#Configuraciones de spark
+config <- spark_config()
+config$spark.driver.memory <- "8g"
+config$spark.executor.instances <- 4
+config$spark.executor.memory <- "4g"
+config$spark.executor.cores <- 2
+config$spark.storage.memoryFraction <- 0.8
+config$spark.memory.fraction <- 0.7
+config$spark.memory.storageFraction <- 0.6
+config$`spark.network.timeout` <- "600s"
+config$`spark.sql.shuffle.partitions` <- 200
 
 # Establecemos la coneccion con spark
 sc <- spark_connect(master = "local", config = config)
@@ -79,5 +80,7 @@ datos_final <- datos_final |>
 datos_final <- datos_final |> 
   left_join(eci_product_master, by = c("SKU", "SUBGROUP")) |>
   select(!c(product_name,brand,base_price,initial_ticket_price,costos)) 
+
+
 
 
