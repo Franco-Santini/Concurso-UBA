@@ -8,18 +8,10 @@ library(data.table)
 library(arrow)
 library(readr)
 library(kableExtra)
+library(plotly)
 
 #Configuraciones de spark
 config <- spark_config()
-config$spark.driver.memory <- "8g"
-config$spark.executor.instances <- 4
-config$spark.executor.memory <- "4g"
-config$spark.executor.cores <- 2
-config$spark.storage.memoryFraction <- 0.8
-config$spark.memory.fraction <- 0.7
-config$spark.memory.storageFraction <- 0.6
-config$`spark.network.timeout` <- "600s"
-config$`spark.sql.shuffle.partitions` <- 200
 
 # Establecemos la coneccion con spark
 sc <- spark_connect(master = "local", config = config)
@@ -39,10 +31,143 @@ ds <- open_dataset("eci_transactions.parquet")
 
 eci_transactions <- spark_read_parquet(sc, name = "eci_transacciones", path = "eci_transactions.parquet")
 
+#Para la base completa
+
+# Copiar tabla de tiendas y productos a Spark
+
+eci_product_master <- rename(eci_product_master, SKU = sku, SUBGROUP = subgroup)
+eci_stores_tbl   <- copy_to(sc, eci_stores,        name = "eci_stores",        overwrite = TRUE)
+eci_products_tbl <- copy_to(sc, eci_product_master, name = "eci_product_master", overwrite = TRUE)
+
+#Agrego los costos y precios base
+
+datos_tbl <- eci_transactions %>%
+  left_join(eci_products_tbl, by = c("SKU", "SUBGROUP"))
+
+#Agrupo por el día, subproducto y tienda.
+
+print(colnames(datos_tbl))#Voy viendo que todas las variables esten
+
+datos_tbl <- datos_tbl %>%
+  mutate(QUANTITY = round(TOTAL_SALES / PRICE)) %>%
+  group_by(STORE_SUBGROUP_DATE_ID) %>%
+  summarise(
+    TOTAL_SALES_        = sum(TOTAL_SALES),
+    QUANTITY_           = sum(QUANTITY),
+    PRICE_              = sum(PRICE),
+    BASE_PRICE_         = sum(base_price),
+    INITIAL_TICKET_PRICE_ = sum(initial_ticket_price),
+    COSTOS_             = sum(costos)
+  ) %>%
+  ungroup() %>%
+  mutate(STORE_SUBGROUP_DATE_ID_2 = STORE_SUBGROUP_DATE_ID) %>%
+  tidyr::separate(STORE_SUBGROUP_DATE_ID_2, into = c("STORE_ID","SUBGROUP","DATE_ID"), sep = "_") %>%
+  left_join(eci_stores_tbl, by = "STORE_ID") 
+
+print(colnames(datos_tbl))#Voy viendo que todas las variables esten
+
+#Observo la cantidad de filas
+
+datos_tbl %>% tally()
+
+#Obtengo el archivo .parquet de la base que usaremos para el objetivo 1
+
+spark_write_parquet(
+  datos_tbl,
+  path = "Datos/datos_final.parquet",
+  mode = "overwrite"  # o "append" si querés agregar
+)
+
+#Leo el archivo final y empiezo a hacer consultas
+
+ds_final <- open_dataset("Datos/datos_final.parquet")
+
+print(colnames(ds_final))#Voy viendo que todas las variables esten
+
+# Conteo por subgrupo
+conteo_subgrupo <- ds_final %>%
+  group_by(SUBGROUP) %>%
+  summarise(total_ventas = sum(TOTAL_SALES_, na.rm = TRUE),
+            cantidad = sum(QUANTITY_, na.rm = TRUE)) %>%
+  collect()
+
+
+#Gráfico de barras
+
+plot_ly(
+  data = conteo_subgrupo,
+  x = ~total_ventas,
+  y = ~reorder(SUBGROUP, total_ventas),
+  type = "bar",
+  orientation = "h",
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "Demanda total (en $) por Subgrupo",
+    xaxis = list(title = "Demanda"),
+    yaxis = list(title = "Subgrupo")
+  )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#Para una muestra
+
 #Saco una muestra de transacciones
 
 muestra <- eci_transactions %>%
-  sdf_sample(fraction = 10000 / sdf_nrow(eci_transactions), replacement = FALSE) %>%
+  sdf_sample(fraction = 100000 / sdf_nrow(eci_transactions), replacement = FALSE) %>%
   collect()
 
 #Agrego los costos y precios base.

@@ -26,8 +26,82 @@ eci_stores <- read_csv("Datos/eci_stores.csv")
 eci_product_groups <- read_csv("Datos/eci_product_groups.csv")
 
 eci_product_master <- read_csv("Datos/eci_product_master.csv")
+
+eci_stores_clusters <- read_csv("Datos/eci_stores_clusters.csv")
 ```
 
+
+```{r}
+#Datos
+
+#df <- fread("Datos/eci_transactions.csv")  
+
+#write_parquet(df, "eci_transactions.parquet")
+
+#Configuraciones de spark
+config <- spark_config()
+
+# Establecemos la coneccion con spark
+sc <- spark_connect(master = "local", config = config)
+
+#ds <- open_dataset("eci_transactions.parquet")
+
+eci_transactions <- spark_read_parquet(sc, name = "eci_transacciones", path = "eci_transactions.parquet")
+
+#Para la base completa
+
+# Copiar tabla de tiendas y productos a Spark
+
+eci_product_master <- rename(eci_product_master, SKU = sku, SUBGROUP = subgroup)
+eci_stores_tbl   <- copy_to(sc, eci_stores,        name = "eci_stores",        overwrite = TRUE)
+eci_products_tbl <- copy_to(sc, eci_product_master, name = "eci_product_master", overwrite = TRUE)
+
+#Agrego los costos y precios base
+
+datos_tbl <- eci_transactions %>%
+  left_join(eci_products_tbl, by = c("SKU", "SUBGROUP"))
+
+#Agrupo por el día, subproducto y tienda.
+
+print(colnames(datos_tbl))#Voy viendo que todas las variables esten
+
+datos_tbl <- datos_tbl %>%
+  mutate(QUANTITY = round(TOTAL_SALES / PRICE)) %>%
+  group_by(STORE_SUBGROUP_DATE_ID) %>%
+  summarise(
+    TOTAL_SALES_        = sum(TOTAL_SALES),
+    QUANTITY_           = sum(QUANTITY),
+    PRICE_              = sum(PRICE),
+    BASE_PRICE_         = sum(base_price),
+    INITIAL_TICKET_PRICE_ = sum(initial_ticket_price),
+    COSTOS_             = sum(costos)
+  ) %>%
+  ungroup() %>%
+  mutate(STORE_SUBGROUP_DATE_ID_2 = STORE_SUBGROUP_DATE_ID) %>%
+  tidyr::separate(STORE_SUBGROUP_DATE_ID_2, into = c("STORE_ID","SUBGROUP","DATE_ID"), sep = "_") %>%
+  left_join(eci_stores_tbl, by = "STORE_ID") 
+
+print(colnames(datos_tbl))#Voy viendo que todas las variables esten
+
+#Observo la cantidad de filas
+
+datos_tbl %>% tally()
+
+#Obtengo el archivo .parquet de la base que usaremos para el objetivo 1
+
+spark_write_parquet(
+  datos_tbl,
+  path = "Datos/datos_final.parquet",
+  mode = "overwrite"  # o "append" si querés agregar
+)
+
+#Leo el archivo final y empiezo a hacer consultas
+
+ds_final <- open_dataset("Datos/datos_final.parquet")
+
+print(colnames(ds_final))#Voy viendo que todas las variables esten
+
+```
 
 ## Introducción
 
@@ -269,16 +343,75 @@ eci_product_master |>
                 full_width = FALSE, position = "center")
 ```
 
-Se observan similitudes tanto en los precios iniciales promedio, como en los costos promedios para todos los productos de Basketball y Baseball.
-
-## Desarrollo
-
-### Preprosesamiento de los datos - Objetivo 1
+Se observan similitudes tanto en los precios iniciales promedio, como en los costos promedios para los productos de Basketball y Baseball.
 
 
+##Desarrollo
+
+### Objetivo 1 - Estimación de demanda
+
+bla bla bla- podemos hablar de que modelos vamos a usar en grandes rasgos, onda usaremos modelos de machine learning y series de tiempo para predecir la demanda.
+
+#### Preprocesamiento de los datos - Objetivo 1
+
+bla bla bla
+
+#### Análisis descriptivo - Objetivo 1 
+
+Al querer estimar la demanda (`TOTAL_SALES`) de manera adecuada, se plantea el análisis descriptivo de manera que se evidencie que variables entre las que se encuentran disponibles en nuestras bases pueden influir en el comportamiento de la variable respuesta mencionada.
+
+Contamos con información de articulos pertenecientes a 73 subproductos distintos.
+
+Inicialmente queremos evidenciar si hay diferencias en la demanda para los distintos subproductos.
+
+```{r}
+# Conteo por subgrupo
+conteo_subgrupo <- ds_final %>%
+  group_by(SUBGROUP) %>%
+  summarise(total_ventas = sum(TOTAL_SALES_, na.rm = TRUE),
+            cantidad = sum(QUANTITY_, na.rm = TRUE)) %>%
+  collect()
+
+
+#Gráfico de barras
+
+plot_ly(
+  data = conteo_subgrupo,
+  x = ~total_ventas,
+  y = ~reorder(SUBGROUP, total_ventas),
+  type = "bar",
+  orientation = "h",
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "Demanda total (en $) por Subgrupo",
+    xaxis = list(title = "Demanda"),
+    yaxis = list(title = "Subgrupo")
+  )
+
+#Porcentaje que acumulan los 9 primeros
+
+# Vector con los 9 subgrupos
+top_subgrupos <- c("Headphones", "Speakers", "Wearables", "Desktops", 
+                   "Smartphones", "Home Audio", "Tablets", "Accesories", "Laptops")
+
+# Calcular porcentaje
+porcentaje_top <- conteo_subgrupo %>% 
+  mutate(es_top = SUBGROUP %in% top_subgrupos) %>%
+  group_by(es_top) %>%
+  summarise(total_ventas_2 = sum(total_ventas, na.rm = TRUE)) %>%
+  mutate(pct = 100 * total_ventas_2 / sum(total_ventas_2))
+
+porcentaje_top
+
+```
+
+Claramente se observa que hay 9 subproductos que generaron mucha mayor demanda que el resto, estos productos son Headphones, Speakers, Wearables, Desktops, Smartphones, Home Audio, Tablets, Accesories y Laptops; acumulando un 42% de la demanda total.
+
+Estos artículos tienen características muy similares, todos ellos corresponden a productos electrónicos vinculados principalmente a la informática, telecomunicaciones y entretenimiento audiovisual.
 
 
 
 
+#### Técnicas estadísticas - Objetivo 1
 
-### Técnicas estadísticas - Objetivo 1
