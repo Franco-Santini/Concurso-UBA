@@ -317,7 +317,7 @@ Observando las variables cuantitativas de las bases de datos que se usarán inic
 
 Se realizó una inspección por cada una de las variables de interés y en la base de datos `eci_customer_data` se  encontraron valores faltantes en la variable `QUANTITY`, la cual como mencionamos anteriormente puede calcularse como `TOTAL_SALES`/`PRICE`, de esta manera se pudo reconstruir el dato e imputar todos los valores faltantes de dicha variable.
 
-En la base de datos `eci_stores`, hay datos faltantes en las variables `ADRESS2`, `CLOSEDATE` y `STORE_TYPE`. En las variables `ADRESS2` y `CLOSEDATE` puede que no sea un error en sí, sino que no esten los datos debido a que la tienda no tiene una segunda dirección o porque todavía no cerró respectivamente. Para la variable `STORE_TYPE` encontramos 2 datos faltantes, en los locales QuickBuy - Columbia y MarketExpress Lakewood Uptown.
+En la base de datos `eci_stores`, hay datos faltantes en las variables `ADRESS2`, `CLOSEDATE` y `STORE_TYPE`. En las variables `ADRESS2` y `CLOSEDATE` puede que no sea un error en sí, sino que no esten los datos debido a que la tienda no tiene una segunda dirección o porque todavía no cerró respectivamente. Para la variable `STORE_TYPE` encontramos 2 datos faltantes, en los locales QuickBuy - Columbia y MarketExpress Lakewood Uptown, los cuales fueron reemplazados por el valor *Unknown*, ya que no es posible saber de que tipo de tienda se trata.
 
 - *Datos del subproducto "Basketball"*
 
@@ -341,6 +341,7 @@ eci_product_master |>
   kable(format = "html", caption = "Promedios de precios y costos por Subgrupo (Baseball vs Basketball)") |> 
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), 
                 full_width = FALSE, position = "center")
+
 ```
 
 Se observan similitudes tanto en los precios iniciales promedio, como en los costos promedios para los productos de Basketball y Baseball.
@@ -354,15 +355,27 @@ bla bla bla- podemos hablar de que modelos vamos a usar en grandes rasgos, onda 
 
 #### Preprocesamiento de los datos - Objetivo 1
 
-bla bla bla
+Para la preparación de los datos, se realizaron diversos procesos de depuración y combinación de las bases disponibles, con el fin de obtener un conjunto único que permitiera entrenar el modelo de predicción de la demanda.
+
+En primer lugar, a partir de la base `eci_stores` se identificaron y excluyeron aquellas tiendas que habían cerrado antes de la semana del 1 al 7 de enero de 2024, ya que no tendría sentido estimar demanda para locales que ya no se encontraban operativos.
+
+Posteriormente, se procedió a unir la información de `eci_stores` con la de `eci_stores_clusters`, de manera de que cada tienda tenga su zona o región correspondiente.
+
+También, se llevó a cabo la integración de las bases `eci_product_group` y `eci_product_master`, lo que permitió tener en una única tabla toda la información vinculada a los productos, así como las promociones asociadas a estos, en caso de que las hubieran tenido.
+
+Una vez realizadas estas integraciones, se combinaron todas las bases anteriores con la base `eci_transactions`. De esta forma, cada transacción no solo contiene información sobre la venta realizada, sino también el nombre y la categoría del producto, la tienda donde se comercializó y su región, la franquicia a la que pertenece, entre otros.
+
+Sobre esta base consolidada, se generaron 3 nuevas variables temporales a partir de la columna `DATE`, extrayendo el día, mes y año de cada transacción.
+
+Finalmente, las transacciones se agruparon por día, por subproducto y por tienda, con el propósito de entrenar los datos de esa manera y asi poder cumplir el objetivo de predecir la demanda desde el 1/1/2024 al 7/1/2024 de los distintos subproductos, en cada una de las tiendas minoristas. *También, como dato adicional, esto hace que se reduzca el costo computacional que conlleva entrenar los datos, debido a la reduccion de filas en la base que este agrupamiento implica.*
+
+En síntesis, el proceso de preparación de datos permitió pasar de múltiples bases dispersas a un único conjunto de datos estructurado, listo para ser utilizado en el entrenamiento de los modelos predictivos.
 
 #### Análisis descriptivo - Objetivo 1 
 
 Al querer estimar la demanda (`TOTAL_SALES`) de manera adecuada, se plantea el análisis descriptivo de manera que se evidencie que variables entre las que se encuentran disponibles en nuestras bases pueden influir en el comportamiento de la variable respuesta mencionada.
 
-Contamos con información de articulos pertenecientes a 73 subproductos distintos.
-
-Inicialmente queremos evidenciar si hay diferencias en la demanda para los distintos subproductos.
+Se cuenta con información de articulos pertenecientes a 73 subproductos distintos, e inicialmente se quiere evidenciar si hay diferencias en la demanda para los distintos subproductos.
 
 ```{r}
 # Conteo por subgrupo
