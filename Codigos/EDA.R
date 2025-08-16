@@ -16,6 +16,8 @@ config <- spark_config()
 # Establecemos la coneccion con spark
 sc <- spark_connect(master = "local", config = config)
 
+#spark_disconnect_all() desconectar spark
+
 # Leer el archivo CSV de forma eficientE
 #df <- fread("Datos/eci_transactions.csv")  
 

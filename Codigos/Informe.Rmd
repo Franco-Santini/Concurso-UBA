@@ -30,7 +30,6 @@ eci_product_master <- read_csv("Datos/eci_product_master.csv")
 eci_stores_clusters <- read_csv("Datos/eci_stores_clusters.csv")
 ```
 
-
 ```{r}
 #Datos
 
@@ -46,7 +45,7 @@ sc <- spark_connect(master = "local", config = config)
 
 #ds <- open_dataset("eci_transactions.parquet")
 
-eci_transactions <- spark_read_parquet(sc, name = "eci_transacciones", path = "eci_transactions.parquet")
+eci_transactions <- spark_read_parquet(sc, name = "eci_transacciones", path = "../eci_transactions.parquet")
 
 #Para la base completa
 
@@ -67,7 +66,7 @@ print(colnames(datos_tbl))#Voy viendo que todas las variables esten
 
 datos_tbl <- datos_tbl %>%
   mutate(QUANTITY = round(TOTAL_SALES / PRICE)) %>%
-  group_by(STORE_SUBGROUP_DATE_ID) %>%
+  group_by(STORE_SUBGROUP_DATE_ID, category, group) %>%
   summarise(
     TOTAL_SALES_        = sum(TOTAL_SALES),
     QUANTITY_           = sum(QUANTITY),
@@ -177,7 +176,7 @@ Contiene información particular de cada una de las distintas tiendas minoristas
 
 -   `STORE_NAME` (generalmente formado por BRAND - CITY): nombre de la tienda.
 
--   `ADRESS1` y `ADRESS2`: información sobre la dirección de la tienda.
+-   `ADDRESS1` y `ADDRESS2`: información sobre la dirección de la tienda.
 
 -   `CITY`: ciudad de la tienda.
 
@@ -303,23 +302,23 @@ Contiene información de 801923 clientes, identificando datos personales de los 
 
 Antes de iniciar el análisis, fue necesario realizar una inspección exhaustiva de los datos. Este proceso permitió identificar aspectos relevantes vinculados al preprocesamiento, tales como la detección de valores atípicos, la presencia de datos faltantes y otras cuestiones que requerían tratamiento previo. Dichas cuestiones se enuncian a continuación:
 
-- *Base de clientes (`eci_customer_data`)* 
+-   *Base de clientes (`eci_customer_data`)*
 
 Al analizar las variables disponibles en esta base, quedó evidenciado que no hay una variable que conecte la información aquí disponible con el resto de las bases. Es decir, se cuenta con la información de los clientes, pero no es posible identificar en que tienda compra cada uno, o que transacción realiza cada uno. Por este motivo no se utilizará esta información, al menos en este primer análisis.
 
-- *Outliers*
+-   *Outliers*
 
 Observando las variables cuantitativas de las bases de datos que se usarán inicialmente **no** se detectaron valores atípicos.
 
 (Insertamos tabla con quartiles, minimo, media y maximo?)
 
-- *Valores faltantes*
+-   *Valores faltantes*
 
-Se realizó una inspección por cada una de las variables de interés y en la base de datos `eci_customer_data` se  encontraron valores faltantes en la variable `QUANTITY`, la cual como mencionamos anteriormente puede calcularse como `TOTAL_SALES`/`PRICE`, de esta manera se pudo reconstruir el dato e imputar todos los valores faltantes de dicha variable.
+Se realizó una inspección por cada una de las variables de interés y en la base de datos `eci_transaction` se encontraron valores faltantes en la variable `QUANTITY`, la cual como mencionamos anteriormente puede calcularse como `TOTAL_SALES`/`PRICE`, de esta manera se pudo reconstruir el dato e imputar todos los valores faltantes de dicha variable.
 
-En la base de datos `eci_stores`, hay datos faltantes en las variables `ADRESS2`, `CLOSEDATE` y `STORE_TYPE`. En las variables `ADRESS2` y `CLOSEDATE` puede que no sea un error en sí, sino que no esten los datos debido a que la tienda no tiene una segunda dirección o porque todavía no cerró respectivamente. Para la variable `STORE_TYPE` encontramos 2 datos faltantes, en los locales QuickBuy - Columbia y MarketExpress Lakewood Uptown, los cuales fueron reemplazados por el valor *Unknown*, ya que no es posible saber de que tipo de tienda se trata.
+En la base de datos `eci_stores`, hay datos faltantes en las variables `ADDRESS2`, `CLOSEDATE` y `STORE_TYPE`. Para las variables `ADDRESS2` y `CLOSEDATE` puede que esto no sea un error en sí, sino que no esten los datos debido a que la tienda no tiene una segunda dirección o porque todavía no cerró respectivamente. Para la variable `STORE_TYPE` encontramos 2 datos faltantes, en los locales QuickBuy - Columbia y MarketExpress Lakewood Uptown, los cuales fueron reemplazados por el valor *Unknown*, ya que no es posible saber de que tipo de tienda se trata.
 
-- *Datos del subproducto "Basketball"*
+-   *Datos del subproducto "Basketball"*
 
 Al revisar la base de transacciones (`eci_transaction`) se identificó que no existen registros asociados al subproducto "Basketball", a pesar de que este se encuentra incluido en la base de productos (`eci_product_master`) y forma parte de los subproductos a predecir en el primer objetivo. Una posible explicación es que los SKU correspondientes a los subproductos de las categorías "Basketball" y "Baseball" presentan coincidencias en su codificación (por ejemplo, SPOTEBA001), lo que podría haber generado un error en el proceso de carga de datos y derivado en la ausencia de registros para "Basketball".
 
@@ -346,8 +345,7 @@ eci_product_master |>
 
 Se observan similitudes tanto en los precios iniciales promedio, como en los costos promedios para los productos de Basketball y Baseball.
 
-
-##Desarrollo
+## Desarrollo
 
 ### Objetivo 1 - Estimación de demanda
 
@@ -359,21 +357,17 @@ Para la preparación de los datos, se realizaron diversos procesos de depuració
 
 En primer lugar, a partir de la base `eci_stores` se identificaron y excluyeron aquellas tiendas que habían cerrado antes de la semana del 1 al 7 de enero de 2024, ya que no tendría sentido estimar demanda para locales que ya no se encontraban operativos.
 
-Posteriormente, se procedió a unir la información de `eci_stores` con la de `eci_stores_clusters`, de manera de que cada tienda tenga su zona o región correspondiente.
-
-También, se llevó a cabo la integración de las bases `eci_product_group` y `eci_product_master`, lo que permitió tener en una única tabla toda la información vinculada a los productos, así como las promociones asociadas a estos, en caso de que las hubieran tenido.
-
-Una vez realizadas estas integraciones, se combinaron todas las bases anteriores con la base `eci_transactions`. De esta forma, cada transacción no solo contiene información sobre la venta realizada, sino también el nombre y la categoría del producto, la tienda donde se comercializó y su región, la franquicia a la que pertenece, entre otros.
+Posteriormente se combinaron las bases `eci_stores` y `eci_product_master` con la base `eci_transactions`. De esta forma, cada transacción no solo contiene información sobre la venta realizada, sino también el nombre y la categoría del producto, la tienda donde se comercializó y su región, la franquicia a la que pertenece, entre otras características.
 
 Sobre esta base consolidada, se generaron 3 nuevas variables temporales a partir de la columna `DATE`, extrayendo el día, mes y año de cada transacción.
 
-Finalmente, las transacciones se agruparon por día, por subproducto y por tienda, con el propósito de entrenar los datos de esa manera y asi poder cumplir el objetivo de predecir la demanda desde el 1/1/2024 al 7/1/2024 de los distintos subproductos, en cada una de las tiendas minoristas. *También, como dato adicional, esto hace que se reduzca el costo computacional que conlleva entrenar los datos, debido a la reduccion de filas en la base que este agrupamiento implica.*
+Finalmente, las transacciones se agruparon por día, por subproducto y por tienda (`STORE_SUBGROUP_DATE_ID`), con el propósito de entrenar los datos de esa manera y asi poder cumplir el objetivo de predecir la demanda desde el 1/1/2024 al 7/1/2024 de los distintos subproductos, en cada una de las tiendas minoristas. También, como dato adicional, esto hace que se reduzca el costo computacional que conlleva entrenar los datos, debido a la reduccion de filas en la base que este agrupamiento implica, pasando de trabajar con 19.004.759 de datos a una base final con 5.137.958 de datos.
 
 En síntesis, el proceso de preparación de datos permitió pasar de múltiples bases dispersas a un único conjunto de datos estructurado, listo para ser utilizado en el entrenamiento de los modelos predictivos.
 
-#### Análisis descriptivo - Objetivo 1 
+#### Análisis descriptivo - Objetivo 1
 
-Al querer estimar la demanda (`TOTAL_SALES`) de manera adecuada, se plantea el análisis descriptivo de manera que se evidencie que variables entre las que se encuentran disponibles en nuestras bases pueden influir en el comportamiento de la variable respuesta mencionada.
+Al querer estimar la demanda (`TOTAL_SALES`) de manera adecuada, se plantea el análisis descriptivo buscando evidenciar que variables entre las que se encuentran disponibles en nuestras bases pueden influir en el comportamiento de la variable respuesta mencionada.
 
 Se cuenta con información de articulos pertenecientes a 73 subproductos distintos, e inicialmente se quiere evidenciar si hay diferencias en la demanda para los distintos subproductos.
 
@@ -422,9 +416,6 @@ porcentaje_top
 Claramente se observa que hay 9 subproductos que generaron mucha mayor demanda que el resto, estos productos son Headphones, Speakers, Wearables, Desktops, Smartphones, Home Audio, Tablets, Accesories y Laptops; acumulando un 42% de la demanda total.
 
 Estos artículos tienen características muy similares, todos ellos corresponden a productos electrónicos vinculados principalmente a la informática, telecomunicaciones y entretenimiento audiovisual.
-
-
-
 
 #### Técnicas estadísticas - Objetivo 1
 
