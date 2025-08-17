@@ -5,18 +5,19 @@ library(dbplot)
 library(lubridate)
 library(rlang)
 library(tidyr)
-library(fpp3) # Modelos de series de tiempo
+# library(tidymodels) 
+# library(modeltime)
+# library(timetk)
 
 # Configuraciones de spark
 config <- spark_config()
 # Driver (R) -> Spark
 config$spark.driver.memory <- "2g"
-config$spark.driver.memoryOverhead <- "512m"
+# config$spark.driver.memoryOverhead <- "512m"
 config$spark.executor.instances <- 2     # Máximo 2 instancias en local
 config$spark.executor.memory <- "2g"
-config$spark.executor.memoryOverhead <- "512m"
+# config$spark.executor.memoryOverhead <- "512m"
 config$spark.executor.cores <- 2         # Aprovecha CPU sin saturar RAM
-config$spark.sql.shuffle.partitions <- 50
 
 # Establecemos la coneccion con spark
 sc <- spark_connect(master = "local", config = config)
@@ -102,29 +103,35 @@ datos_otra_forma <- datos_otra_forma |>
   mutate(mes = month(as_date(DATE_ID)),
          dia = day(as_date(DATE_ID)),
          año = year(as_date(DATE_ID)),
-         año_mes = to_date(concat_ws("-", año, lpad(mes, 2, "0"), "01")))
+         año_mes = to_date(concat_ws("-", año, lpad(mes, 2, "0"), "01")),
+         DATE_ID = as_date(DATE_ID))
+
+
+
 
 # Preparamos los datos para aplicar series temporales
 # La idea es separar cada serie temporal por tienda y subgrupo y para cada ella estimar el 
 # precio mediano de enero x completo, se evita el precio promedio por que esta influenciado por precios muy caros o muy baratos
 
 datos_series <- datos_otra_forma |> 
-  group_by(STORE_ID, SUBGROUP, año_mes) |> 
-  summarise(Median_price = dplyr::sql("percentile_approx(PRICE_, 0.5)")) |> 
+  group_by(STORE_ID, SUBGROUP, DATE_ID) |> 
+  summarise(PRICE_ = dplyr::sql("percentile_approx(PRICE_, 0.5)")) |> 
   ungroup() |> 
   collect()
 
-# Guardo los datos de las series, porque tarda mucho el collect
-# write.csv(datos_series, "Datos/datos_series.csv", row.names = FALSE, quote = FALSE)
-
-fechas_meses <- seq(ymd("2021-01-01"), ymd("2023-12-01"), by = "month")
+# Creamos el data frame de las series diarias
+fechas_dias <- seq(ymd("2021-01-01"), ymd("2023-12-31"), by = "day")
 
 df <- expand.grid(STORE_ID = unique(datos_series$STORE_ID),
                   SUBGROUP = unique(datos_series$SUBGROUP),
-                  año_mes = fechas_meses)
+                  DATE_ID = fechas_dias)
 
-datos_series_completo <- df |> 
-  left_join(datos_series, by = c("STORE_ID", "SUBGROUP", "año_mes")) |> 
+# Lo subimos a spark
+df_series_diarias <- sparklyr::copy_to(sc, df)
+
+# Precio mediano de la serie dia a dia
+datos_series_completo <- df_series_diarias |> 
+  left_join(datos_series, by = c("STORE_ID", "SUBGROUP", "DATE_ID")) |> 
   mutate(Median_price = ifelse(is.na(Median_price), 0, Median_price))
 
 datos_series_completo <- datos_series_completo |> 
@@ -168,4 +175,10 @@ guardar <- data.frame(STORE_ID = resultado_precio$STORE_ID,
                       SUBGROUP = resultado_precio$SUBGROUP,
                       PRICE_ = resultado_precio$.mean)
 
-write.csv(guardar, "Predicciones/precio_series.csv", row.names = FALSE, quote = FALSE)
+# write.csv(guardar, "Predicciones/precio_series.csv", row.names = FALSE, quote = FALSE)
+
+###################### Optimizar el precio de la serie maximizando la ganancia
+
+
+
+

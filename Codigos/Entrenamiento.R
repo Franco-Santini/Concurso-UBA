@@ -113,9 +113,10 @@ datos_otra_forma <- eci_transactions_stores_prod |>
 
 datos_otra_forma <- datos_otra_forma |> 
   left_join(eci_stores_clusters_join, by = "STORE_ID") |>
-  select(!c(ADDRESS1, ADDRESS2, STATE, ZIP, OPENDATE, CLOSEDATE, STORE_TYPE, CLUSTER)) |> 
+  select(!c(ADDRESS1, ADDRESS2, STATE, ZIP, OPENDATE, CLOSEDATE, CLUSTER)) |> 
   mutate(mes = month(as_date(DATE_ID)),
-         dia = day(as_date(DATE_ID)))
+         dia = day(as_date(DATE_ID)),
+         STORE_TYPE = if_else(is.na(STORE_TYPE), "Unknown", STORE_TYPE))
 
 # Obtenemos la media y el desvio de PRICE_
 
@@ -162,17 +163,15 @@ cant_stores_subg <- datos_otra_forma |>
 #                                        num_trees = 100, max_depth = 10)
 
 rf_model <- ml_random_forest_regressor(train_set_2,
-                                       TOTAL_SALES_ ~ PRICE_ + SUBGROUP + REGION + STORE_ID + mes + dia + category + group,
+                                       TOTAL_SALES_ ~ PRICE_ + SUBGROUP + STORE_TYPE + REGION + STORE_ID + mes + dia + category + group + BRAND,
                                        num_trees = 120, max_depth = 5, max_bins = 48, min_instances_per_node = 5, 
                                        seed = 200, subsampling_rate = 0.8, feature_subset_strategy = "onethird")
 
 rf_model_definitivo <- ml_random_forest_regressor(datos_otra_forma,
-                                                  TOTAL_SALES_ ~ PRICE_ + QUANTITY_ + SUBGROUP + BRAND + REGION + STORE_ID + mes + dia,
-                                                  num_trees = 105, max_depth = 6, max_bins = 64)
+                                                  TOTAL_SALES_ ~ PRICE_ + SUBGROUP + REGION + STORE_ID + mes + dia + category + group,
+                                                  num_trees = 120, max_depth = 5, max_bins = 48, min_instances_per_node = 5, 
+                                                  seed = 200, subsampling_rate = 0.8, feature_subset_strategy = "onethird")
 
-xgb_model <- xgboost_regressor(train_set_2,
-                               TOTAL_SALES_ ~ PRICE_ + QUANTITY_ + SUBGROUP + REGION + STORE_ID + mes + dia,
-                               eta = 0.3, max_depth = 5)
 
 # Capacidad predictiva del modelo (Regresion lineal)
 predicciones <- reg_lin |> 
@@ -213,18 +212,7 @@ r2 <- ml_regression_evaluator(predicciones_rf,
                               prediction_col = "prediction",
                               metric_name = "r2") # R^2: 0.8743325 conjunto de validacion (150 arboles)
 
-mae <- ml_regression_evaluator(predicciones_rf, 
-                               label_col = "TOTAL_SALES_", 
-                               prediction_col = "prediction",
-                               metric_name = "mae")
-
-mape <- predicciones_rf |> 
-  mutate(
-    abs_pct_error = abs((TOTAL_SALES_ - prediction) / TOTAL_SALES_)
-  ) |> 
-  summarise(
-    MAPE = mean(abs_pct_error)
-  )
+# Tuneo de hiperparámetros de random forest (hacer un pipeline que te permita tunear hiperparámetros)
 
 
 # Preparacion de los datos para el entrenamiento del modelo
@@ -496,10 +484,16 @@ precio_promedio <- datos_otra_forma |>
 precio_mediano <- datos_otra_forma |> 
   mutate(DATE_ID = as_date(DATE_ID)) |> 
   filter(DATE_ID >= "2023-12-01") |> 
-  group_by(SUBGROUP, STORE_ID, category, group) |> 
+  group_by(SUBGROUP, STORE_ID, category, group, STORE_TYPE) |> 
   summarise(PRICE_ = dplyr::sql("percentile_approx(PRICE_, 0.5)")) |> 
   ungroup() |> 
   collect()
+
+precio_series <- read.csv("Predicciones/precio_series.csv")
+
+precio_mediano <- precio_mediano |> 
+  left_join(precio_series, by = c("STORE_ID", "SUBGROUP")) |> 
+  rename(PRICE_ = PRICE_.y)
 
 ids_test_sep_mismo_precio_sin_bask_base <- ids_test_sep |> 
   filter(SUBGROUP != "Basketball") |> 
@@ -512,7 +506,7 @@ ids_test_sep_mismo_precio_bask <- ids_test_sep |>
   left_join((precio_mediano |> filter(SUBGROUP == "Baseball")), by = c("STORE_ID")) |> 
   select(-c(SUBGROUP.y)) |> 
   rename(SUBGROUP = SUBGROUP.x) |> 
-  mutate(PRICE_ = PRICE_ * 0.5) |> 
+  mutate(PRICE_ = PRICE_) |> 
   mutate(dia = lubridate::day(DATE_ID))
 
 ids_test_sep_mismo_precio_base <- ids_test_sep |> 
@@ -520,18 +514,18 @@ ids_test_sep_mismo_precio_base <- ids_test_sep |>
   left_join((precio_mediano |> filter(SUBGROUP == "Baseball")), by = c("STORE_ID")) |> 
   select(-c(SUBGROUP.y)) |> 
   rename(SUBGROUP = SUBGROUP.x) |> 
-  mutate(PRICE_ = PRICE_ * 0.5) |> 
+  mutate(PRICE_ = PRICE_) |> 
   mutate(dia = lubridate::day(DATE_ID))
 
 ids_test_sep_mismo_precio_sin_bask_base <- ids_test_sep_mismo_precio_sin_bask_base |> 
   left_join(prom_dia_mes, by = c("STORE_ID", "SUBGROUP", "dia")) |> 
-  select(STORE_SUBGROUP_DATE_ID, STORE_ID, SUBGROUP, DATE_ID, REGION, mes.x, dia, PRICE_, QUANTITY_avg, category, group, BRAND) |> 
+  select(STORE_SUBGROUP_DATE_ID, STORE_ID, SUBGROUP, DATE_ID, REGION, mes.x, dia, PRICE_, PRICE_.x, QUANTITY_avg, category, group, BRAND, STORE_TYPE) |> 
   mutate(QUANTITY_ = ifelse(is.na(QUANTITY_avg), 0, round(QUANTITY_avg))) |>
   rename(mes = mes.x)
 
 ids_test_sep_mismo_precio_base <- ids_test_sep_mismo_precio_base |> 
   left_join(prom_dia_mes, by = c("STORE_ID", "SUBGROUP", "dia")) |> 
-  select(STORE_SUBGROUP_DATE_ID, STORE_ID, SUBGROUP, DATE_ID, REGION, mes.x, dia, PRICE_, QUANTITY_avg, category, group, BRAND) |> 
+  select(STORE_SUBGROUP_DATE_ID, STORE_ID, SUBGROUP, DATE_ID, REGION, mes.x, dia, PRICE_, PRICE_.x, QUANTITY_avg, category, group, BRAND, STORE_TYPE) |> 
   mutate(QUANTITY_ = ifelse(is.na(QUANTITY_avg), 0, round(QUANTITY_avg))) |>
   rename(mes = mes.x)
 
@@ -546,7 +540,8 @@ predicciones_ids_sin_bask <- rf_model |>
   collect()
 
 predicciones_ids_baseball <- predicciones_ids_sin_bask |> 
-  filter(SUBGROUP == "Baseball")
+  filter(SUBGROUP == "Baseball") |> 
+  mutate(TOTAL_SALES = TOTAL_SALES * 0.5)
 
 predicciones_ids_bask <- ids_test_sep_mismo_precio_bask |> 
   left_join(predicciones_ids_baseball, by = c("STORE_ID", "dia")) |> 
@@ -565,5 +560,5 @@ predicciones_ids_completa <- predicciones_ids_completa |>
 predicciones_finales <- ids_test |> left_join(predicciones_ids_completa, by = "STORE_SUBGROUP_DATE_ID")
 
 ### Guardamos las predicciones en un csv
-write.csv(predicciones_finales, "Predicciones/predicciones_finales_v19.csv", row.names = FALSE, quote = FALSE)
+write.csv(predicciones_finales, "Predicciones/predicciones_finales_v23.csv", row.names = FALSE, quote = FALSE)
 
