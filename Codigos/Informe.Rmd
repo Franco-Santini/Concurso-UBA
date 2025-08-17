@@ -20,6 +20,8 @@ library(sparklyr)
 library(ggplot2)
 library(data.table)
 library(arrow)
+library(plotly)
+library(lubridate)
 
 eci_stores <- read_csv("Datos/eci_stores.csv")
 
@@ -62,7 +64,7 @@ datos_tbl <- eci_transactions %>%
 
 #Agrupo por el día, subproducto y tienda.
 
-print(colnames(datos_tbl))#Voy viendo que todas las variables esten
+#print(colnames(datos_tbl))#Voy viendo que todas las variables esten
 
 datos_tbl <- datos_tbl %>%
   mutate(QUANTITY = round(TOTAL_SALES / PRICE)) %>%
@@ -78,13 +80,15 @@ datos_tbl <- datos_tbl %>%
   ungroup() %>%
   mutate(STORE_SUBGROUP_DATE_ID_2 = STORE_SUBGROUP_DATE_ID) %>%
   tidyr::separate(STORE_SUBGROUP_DATE_ID_2, into = c("STORE_ID","SUBGROUP","DATE_ID"), sep = "_") %>%
-  left_join(eci_stores_tbl, by = "STORE_ID") 
+  left_join(eci_stores_tbl, by = "STORE_ID")
+  # Paso 1: convertir DATE_ID a Date
+  
 
 print(colnames(datos_tbl))#Voy viendo que todas las variables esten
 
 #Observo la cantidad de filas
 
-datos_tbl %>% tally()
+#datos_tbl %>% tally()
 
 #Obtengo el archivo .parquet de la base que usaremos para el objetivo 1
 
@@ -94,9 +98,11 @@ spark_write_parquet(
   mode = "overwrite"  # o "append" si querés agregar
 )
 
+transactions_df <- read.csv("Datos/eci_transactions.csv", nrows = 6)
+
 #Leo el archivo final y empiezo a hacer consultas
 
-ds_final <- open_dataset("Datos/datos_final.parquet")
+ds_final <- open_dataset("../Datos/datos_final.parquet")
 
 print(colnames(ds_final))#Voy viendo que todas las variables esten
 
@@ -416,6 +422,54 @@ porcentaje_top
 Claramente se observa que hay 9 subproductos que generaron mucha mayor demanda que el resto, estos productos son Headphones, Speakers, Wearables, Desktops, Smartphones, Home Audio, Tablets, Accesories y Laptops; acumulando un 42% de la demanda total.
 
 Estos artículos tienen características muy similares, todos ellos corresponden a productos electrónicos vinculados principalmente a la informática, telecomunicaciones y entretenimiento audiovisual.
+
+Otra variable que puede influir en la demanda de cada subproducto es la fecha en la que se produjo la transacción, para esto se mostrará la evolución de la demanda a través de los meses en los 3 años que abarca este estudio, y complementariamente mostraremos la demanda por día de la semana.
+
+```{r}
+# 1. Calcular ventas totales por subgrupo (para ordenar)
+top_subgrupos <- ds_final %>%
+  group_by(SUBGROUP) %>%
+  summarise(total = sum(TOTAL_SALES_, na.rm = TRUE)) %>%
+  arrange(desc(total)) %>%
+  head(10) %>%
+  collect() %>%
+  pull(SUBGROUP)
+
+# 2. Filtrar dataset solo con esos subgrupos
+ventas_mensuales <- ds_final %>%
+  mutate(month = floor_date(as.Date(DATE_ID), "month")) %>%
+  filter(SUBGROUP %in% top_subgrupos) %>%
+  group_by(month, SUBGROUP) %>%
+  summarise(total_sales = sum(TOTAL_SALES_, na.rm = TRUE), .groups = "drop") %>%
+  collect() %>%
+  arrange(SUBGROUP, month)   # 🔑 aseguramos orden temporal dentro de cada subgrupo
+
+
+# 3. Gráfico interactivo con Plotly
+p <- ventas_mensuales %>%
+  plot_ly(
+    x = ~month,
+    y = ~total_sales,
+    color = ~SUBGROUP,
+    type = "scatter",
+    mode = "lines"
+  ) %>%
+  layout(
+    title = "Evolución mensual de ventas - Top 10 subgrupos",
+    xaxis = list(title = "Mes"),
+    yaxis = list(title = "Ventas Totales")
+  )
+p
+```
+
+```{r}
+
+
+
+
+
+```
+
 
 #### Técnicas estadísticas - Objetivo 1
 
