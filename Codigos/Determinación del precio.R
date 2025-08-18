@@ -5,6 +5,7 @@ library(dbplot)
 library(lubridate)
 library(rlang)
 library(tidyr)
+library(fpp3)
 # library(tidymodels) 
 # library(modeltime)
 # library(timetk)
@@ -116,33 +117,63 @@ datos_otra_forma <- datos_otra_forma |>
 datos_series <- datos_otra_forma |> 
   group_by(STORE_ID, SUBGROUP, DATE_ID) |> 
   summarise(PRICE_ = dplyr::sql("percentile_approx(PRICE_, 0.5)")) |> 
-  ungroup() |> 
-  collect()
+  ungroup()
+
+# Divido el data en los 3 años
+primer_anio <- datos_series |> 
+  mutate(DATE_ID = as_date(DATE_ID)) |> 
+  filter(DATE_ID <= "2021-12-31")
+
+segundo_anio <- datos_series |> 
+  mutate(DATE_ID = as_date(DATE_ID)) |> 
+  filter(DATE_ID <= "2022-12-31" & DATE_ID > "2021-12-31")
+
+tercer_anio <- datos_series |> 
+  mutate(DATE_ID = as_date(DATE_ID)) |> 
+  filter(DATE_ID <= "2023-12-31" & DATE_ID > "2022-12-31")
+
+# 1716197 + 1715450 + 1706311
+
+# Primer año
+df_primer_anio <- primer_anio |> collect()
+# write.csv(df_primer_anio, "Datos/series_pte1.csv", row.names = FALSE, quote = FALSE)
+
+# Segundo año
+df_segundo_anio <- segundo_anio |> collect()
+# write.csv(df_segundo_anio, "Datos/series_pte2.csv", row.names = FALSE, quote = FALSE)
+
+# Tercer año
+df_tercer_anio <- tercer_anio |> collect()
+# write.csv(df_tercer_anio, "Datos/series_pte3.csv", row.names = FALSE, quote = FALSE)
+
+# Unimos los df de los tres años en uno solo
+df_series_completo <- rbind(df_primer_anio, df_segundo_anio, df_tercer_anio)
+
+# Guardamos los datos porque tarda mucho
+# write.csv(df_series_completo, "Datos/datos_series_diarios.csv", row.names = FALSE, quote = FALSE)
 
 # Creamos el data frame de las series diarias
 fechas_dias <- seq(ymd("2021-01-01"), ymd("2023-12-31"), by = "day")
 
-df <- expand.grid(STORE_ID = unique(datos_series$STORE_ID),
-                  SUBGROUP = unique(datos_series$SUBGROUP),
+df <- expand.grid(STORE_ID = unique(df_series_completo$STORE_ID),
+                  SUBGROUP = unique(df_series_completo$SUBGROUP),
                   DATE_ID = fechas_dias)
 
-# Lo subimos a spark
-df_series_diarias <- sparklyr::copy_to(sc, df)
-
 # Precio mediano de la serie dia a dia
-datos_series_completo <- df_series_diarias |> 
-  left_join(datos_series, by = c("STORE_ID", "SUBGROUP", "DATE_ID")) |> 
-  mutate(Median_price = ifelse(is.na(Median_price), 0, Median_price))
+datos_series_completo <- df |> 
+  left_join(df_series_completo, by = c("STORE_ID", "SUBGROUP", "DATE_ID")) |> 
+  mutate(Median_price = ifelse(is.na(PRICE_), 0, PRICE_))
 
 datos_series_completo <- datos_series_completo |> 
-  mutate(mes = as.numeric(month(año_mes)),
-         date = yearmonth(año_mes)) |> 
-  dplyr::select(-año_mes) |> 
+  mutate(mes = as.numeric(month(DATE_ID)),
+         date = ymd(DATE_ID)) |> 
+  dplyr::select(-c(DATE_ID, PRICE_)) |> 
   as_tsibble(
     key = c(STORE_ID, SUBGROUP),
     index = date,
     validate = T,
     regular = T)
+
 
 # Pipeline para ejecutar series de tiempo
 # Definimos un dataframe que sea el que contenga los precios
@@ -163,7 +194,7 @@ for(i in unique(datos_series_completo$STORE_ID)) {
       model(auto = ARIMA(Median_price))
     
     # Predicción del modelo
-    resultado_precio <- rbind(resultado_precio, modelo |> forecast(h=1) |> filter(.model == "auto"))
+    resultado_precio <- rbind(resultado_precio, modelo |> forecast(h=7) |> filter(.model == "auto"))
     
     # Para ver en que serie va metemos un cat
     cat("Se ajustó la serie N°", contador, "\n")
