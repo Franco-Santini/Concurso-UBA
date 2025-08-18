@@ -108,49 +108,20 @@ datos_otra_forma <- datos_otra_forma |>
          DATE_ID = as_date(DATE_ID))
 
 
-
-
 # Preparamos los datos para aplicar series temporales
 # La idea es separar cada serie temporal por tienda y subgrupo y para cada ella estimar el 
 # precio mediano de enero x completo, se evita el precio promedio por que esta influenciado por precios muy caros o muy baratos
 
-datos_series <- datos_otra_forma |> 
-  group_by(STORE_ID, SUBGROUP, DATE_ID) |> 
+datos_series_semanal <- datos_otra_forma |> 
+  mutate(semana = sql("weekofyear(DATE_ID)"),
+         anio = sql("year(DATE_ID)")) |> 
+  group_by(STORE_ID, SUBGROUP, semana, anio) |> 
   summarise(PRICE_ = dplyr::sql("percentile_approx(PRICE_, 0.5)")) |> 
-  ungroup()
-
-# Divido el data en los 3 años
-primer_anio <- datos_series |> 
-  mutate(DATE_ID = as_date(DATE_ID)) |> 
-  filter(DATE_ID <= "2021-12-31")
-
-segundo_anio <- datos_series |> 
-  mutate(DATE_ID = as_date(DATE_ID)) |> 
-  filter(DATE_ID <= "2022-12-31" & DATE_ID > "2021-12-31")
-
-tercer_anio <- datos_series |> 
-  mutate(DATE_ID = as_date(DATE_ID)) |> 
-  filter(DATE_ID <= "2023-12-31" & DATE_ID > "2022-12-31")
-
-# 1716197 + 1715450 + 1706311
-
-# Primer año
-df_primer_anio <- primer_anio |> collect()
-# write.csv(df_primer_anio, "Datos/series_pte1.csv", row.names = FALSE, quote = FALSE)
-
-# Segundo año
-df_segundo_anio <- segundo_anio |> collect()
-# write.csv(df_segundo_anio, "Datos/series_pte2.csv", row.names = FALSE, quote = FALSE)
-
-# Tercer año
-df_tercer_anio <- tercer_anio |> collect()
-# write.csv(df_tercer_anio, "Datos/series_pte3.csv", row.names = FALSE, quote = FALSE)
-
-# Unimos los df de los tres años en uno solo
-df_series_completo <- rbind(df_primer_anio, df_segundo_anio, df_tercer_anio)
+  ungroup() |> 
+  collect()
 
 # Guardamos los datos porque tarda mucho
-# write.csv(df_series_completo, "Datos/datos_series_diarios.csv", row.names = FALSE, quote = FALSE)
+# write.csv(datos_series_semanal, "Datos/datos_series_semanal.csv", row.names = FALSE, quote = FALSE)
 
 # Creamos el data frame de las series diarias
 fechas_dias <- seq(ymd("2021-01-01"), ymd("2023-12-31"), by = "day")
