@@ -118,7 +118,7 @@ transactions_df <- read.csv("Datos/eci_transactions.csv", nrows = 6)
 
 ds_final <- open_dataset("./Datos/datos_final_1.parquet")
 
-print(colnames(ds_final))#Voy viendo que todas las variables esten
+#print(colnames(ds_final))#Voy viendo que todas las variables esten
 
 ds_final = ds_final %>%
   mutate(STORE_TYPE = if_else(is.na(STORE_TYPE), "Unknown", STORE_TYPE))
@@ -146,7 +146,7 @@ En base a la información prevista de las transacciones, se busca generar un mod
 
 2)  *Proponer soluciones para maximizar la ganancia*.
 
-Como ya se mencionó anteriormente, la cadena *Casa de Asterión* presentó una disminución de las ganancias en el último tiempo. Por lo que se busca identificar, para cada subgrupo de productos, el precio óptimo que maximice la ganancia, equilibrando el ingreso por unidad vendida con el volumen total de ventas y de esta manera poder revertir la situación.
+Como ya se mencionó anteriormente, la cadena *Casa de Asterión* presentó una disminución de las ganancias en el último tiempo. Por lo que se busca identificar, para cada producto, el precio óptimo que maximice la ganancia, equilibrando el ingreso por unidad vendida con el volumen total de ventas y de esta manera poder revertir la situación.
 
 ## Metodología
 
@@ -397,13 +397,14 @@ Se cuenta con información de articulos pertenecientes a 73 subproductos distint
 # Conteo por subgrupo
 conteo_subgrupo <- ds_final %>%
   group_by(SUBGROUP) %>%
-  summarise(total_ventas = sum(TOTAL_SALES_, na.rm = TRUE),
-            cantidad = sum(QUANTITY_, na.rm = TRUE)) %>%
-  collect()
+  summarise(
+    total_ventas = sum(TOTAL_SALES_, na.rm = TRUE),
+    cantidad = sum(QUANTITY_, na.rm = TRUE)
+  ) %>%
+  collect() %>%
+  slice_max(order_by = total_ventas, n = 20)   # <- quedarte con los 20 más grandes
 
-
-#Gráfico de barras
-
+# Gráfico de barras
 plot_ly(
   data = conteo_subgrupo,
   x = ~total_ventas,
@@ -413,52 +414,100 @@ plot_ly(
   marker = list(color = "steelblue")
 ) %>%
   layout(
-    title = "Demanda total (en $) por Subgrupo",
+    title = "Top 20 Subgrupos por Demanda total (en $)",
     xaxis = list(title = "Demanda"),
     yaxis = list(title = "Subgrupo")
   )
 
+
 #Porcentaje que acumulan los 9 primeros
 
 # Vector con los 9 subgrupos
-top_subgrupos <- c("Headphones", "Speakers", "Wearables", "Desktops", 
-                   "Smartphones", "Home Audio", "Tablets", "Accesories", "Laptops")
+#top_subgrupos <- c("Headphones", "Speakers", "Wearables", "Desktops", 
+#                   "Smartphones", "Home Audio", "Tablets", "Accesories", "Laptops")
 
 # Calcular porcentaje
-porcentaje_top <- conteo_subgrupo %>% 
-  mutate(es_top = SUBGROUP %in% top_subgrupos) %>%
-  group_by(es_top) %>%
-  summarise(total_ventas_2 = sum(total_ventas, na.rm = TRUE)) %>%
-  mutate(pct = 100 * total_ventas_2 / sum(total_ventas_2))
+#porcentaje_top <- conteo_subgrupo %>% 
+#  mutate(es_top = SUBGROUP %in% top_subgrupos) %>%
+#  group_by(es_top) %>%
+#  summarise(total_ventas_2 = sum(total_ventas, na.rm = TRUE)) %>%
+#  mutate(pct = 100 * total_ventas_2 / sum(total_ventas_2))
 
-porcentaje_top
-
+#porcentaje_top
 ```
 
-Claramente se observa que hay 9 subproductos que generaron mucha mayor demanda que el resto, estos productos son Headphones, Speakers, Wearables, Desktops, Smartphones, Home Audio, Tablets, Accesories y Laptops; acumulando un 42% de la demanda total.
+Claramente se observa que hay 9 subproductos que generaron mucha mayor demanda que el resto, estos productos son Headphones, Speakers, Wearables, Desktops, Smartphones, Home Audio, Tablets, Accesories y Laptops, acumulando un 42% de la demanda total.
 
 Estos artículos tienen características muy similares, todos ellos corresponden a productos electrónicos vinculados principalmente a la informática, telecomunicaciones y entretenimiento audiovisual.
 
-Otra variable que puede influir en la demanda de cada subproducto es la fecha en la que se produjo la transacción, para esto se mostrará la evolución de la demanda a través de los meses en los 3 años que abarca este estudio, y complementariamente mostraremos la demanda por día de la semana.
+Cada uno de estos subgrupos (se diferencias 73 subgrupos distintos) se pueden agrupar en 23 grupos distintos, y a su vez estos grupos pertenecen a 8 categorías distintas. A continuación se presentan las distribuciones en relación a la demanda total para estas variables.
+
+```{r}
+conteo_tree_plot <- ds_final %>%
+  group_by(SUBGROUP,group) %>%
+  summarise(
+    total_ventas = sum(TOTAL_SALES_, na.rm = TRUE)
+  ) %>%
+  collect()
+
+# Armar dataset con raíz
+conteo_tree_plot_root <- conteo_tree_plot %>%
+  # Subgrupos: hijos de group
+  mutate(
+    label = SUBGROUP,
+    parent = group,
+    value = total_ventas
+  ) %>%
+  select(label, parent, value) %>%
+  
+  # Grupos: hijos de "Total"
+  bind_rows(
+    conteo_tree_plot %>%
+      group_by(group) %>%
+      summarise(value = sum(total_ventas), .groups = "drop") %>%
+      mutate(label = group, parent = "Total") %>%
+      select(label, parent, value)
+  ) %>%
+  
+  # Raíz: "Total"
+  bind_rows(
+    tibble(label = "Total", parent = "", value = sum(conteo_tree_plot$total_ventas))
+  )
+
+# Graficar
+plot_ly(
+  type = 'treemap',
+  labels = conteo_tree_plot_root$label, 
+  parents = conteo_tree_plot_root$parent, 
+  values = conteo_tree_plot_root$value,
+  branchvalues = "total",
+  hoverinfo = "label+value+percent parent+percent root",
+  textinfo = "label+value+percent parent+percent root"
+)
+```
+
+Tal como se evidenciaba anteriormente, los productos relacionados a la electrónica son los que presentan mayor demanda en $, evidenciandose que los 9 productos que presentaban una mayor demanda que el resto se agrupan en los 3 "grupos": *Audio*, *Computing* y *Mobile*. Siendo además los 3 grupos que conforman la categoría *Electronics*.
+
+Otra variable que puede influir en la demanda de cada categoría es la fecha en la que se produjo la transacción, para esto se mostrará la evolución de la demanda a través de los meses en los 3 años que abarca este estudio, y complementariamente mostraremos la demanda por día de la semana.
+
 
 ```{r}
 # 1. Calcular ventas totales por subgrupo (para ordenar)
 top_subgrupos <- ds_final %>%
-  group_by(SUBGROUP) %>%
+  group_by(category) %>%
   summarise(total = sum(TOTAL_SALES_, na.rm = TRUE)) %>%
-  arrange(desc(total)) %>%
-  head(10) %>%
+  arrange(desc(total))%>%
   collect() %>%
-  pull(SUBGROUP)
+  pull(category)
 
 # 2. Filtrar dataset solo con esos subgrupos
 ventas_mensuales <- ds_final %>%
   mutate(month = floor_date(as.Date(DATE_ID), "month")) %>%
-  filter(SUBGROUP %in% top_subgrupos) %>%
-  group_by(month, SUBGROUP) %>%
+  filter(category %in% top_subgrupos) %>%
+  group_by(month, category) %>%
   summarise(total_sales = sum(TOTAL_SALES_, na.rm = TRUE), .groups = "drop") %>%
   collect() %>%
-  arrange(SUBGROUP, month)   # 🔑 aseguramos orden temporal dentro de cada subgrupo
+  arrange(category, month)   # 🔑 aseguramos orden temporal dentro de cada subgrupo
 
 
 # 3. Gráfico interactivo con Plotly
@@ -466,21 +515,18 @@ p <- ventas_mensuales %>%
   plot_ly(
     x = ~month,
     y = ~total_sales,
-    color = ~SUBGROUP,
+    color = ~category,
     type = "scatter",
     mode = "lines"
   ) %>%
   layout(
     title = "Evolución mensual de ventas - Top 10 subgrupos",
     xaxis = list(title = "Mes"),
-    yaxis = list(title = "Ventas Totales")
-  )
+    yaxis = list(title = "Ventas Totales"))
 p
 ```
 
-3 encuentran picos de ventas entre abril y mayo de 2022
-
-otros 3 encuentran picos en julio de 2022
+Viendo la evolución de la demanda por mes para las distintas categorías, se podría detectar cierta estacionalidad, siendo los primeros meses del año (generalmente desde enero hasta marzo/abril) los que menor demanda tienen, lo cual es de esperarse porque suelen ser meses de menor consumo. Es sabido que en los meses de noviembre y diciembre el consumo crece mucho por las fiestas (Thanksgiving, Black Friday, Navidad), posteriormente suele caer en los primeros meses del año y suele volver a repuntar con el inicio de la primavera y algunas campañas de compras (por ejemplo, "back to school" más adelante en el año).
 
 Se procede a analizar la demanda en las distintas regiones geográficas en las cuales pertenecen estas tiendas:
 
@@ -579,13 +625,6 @@ subplot(p1, p2, nrows = 2, shareY = TRUE, titleY = TRUE) %>%
       )
     ))
 
-# Centrar usando un div
-htmltools::tagList(
-  htmltools::tags$div(
-    style = "display: block; margin-left: auto; margin-right: auto; width: 80%;",
-    sp
-  )
-)
 ```
 
 Se puede apreciar con claridad que las tiendas de tipo *Street* y *Mall* son las que mayores demanda presentan, con la particularidad que existen las mismas cantidades de tiendas de estos tipos (44 cada uno), y sin embargo las de tipo *Street* tuvieron una demanda de $48.194.937 mayor. 
@@ -653,13 +692,18 @@ subplot(p3, p4, nrows = 2, shareY = TRUE, titleY = TRUE) %>%
 
 Se evidencia que la marca *Essentials Plus* es la que mayor demanda presenta, siendo también la marca con mayor cantidad de tiendas.
 
+
+
 #### Técnicas estadísticas - Objetivo 1
 
 #### Resultados - Objetivo 1
 
 ### Objetivo 2 - Optimización de precios
 
-bla bla bla
+Como se mencionó previamente, la Casa de Asterión necesita mejorar su estrategia de precios, ya que se ha observado una disminución en las ganancias y desea entender cómo ajustar sus precios para optimizar la demanda y el margen de ganancias de sus productos. 
+
+Luego de crear un modelo predictivo de la demanda, se deberán identificar los precios óptimos para cada producto que maximicen la ganancia. Esto implica encontrar el equilibrio adecuado entre el precio y la demanda para asegurar que la empresa obtenga el mayor rendimiento posible.
+
 
 #### Preprocesamiento de los datos - Objetivo 2
 
