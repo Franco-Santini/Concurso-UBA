@@ -507,7 +507,7 @@ ventas_mensuales <- ds_final %>%
   group_by(month, category) %>%
   summarise(total_sales = sum(TOTAL_SALES_, na.rm = TRUE), .groups = "drop") %>%
   collect() %>%
-  arrange(category, month)   # 🔑 aseguramos orden temporal dentro de cada subgrupo
+  arrange(category, month)   
 
 
 # 3. Gráfico interactivo con Plotly
@@ -520,7 +520,7 @@ p <- ventas_mensuales %>%
     mode = "lines"
   ) %>%
   layout(
-    title = "Evolución mensual de ventas - Top 10 subgrupos",
+    title = "Evolución mensual de ventas - Categorías",
     xaxis = list(title = "Mes"),
     yaxis = list(title = "Ventas Totales"))
 p
