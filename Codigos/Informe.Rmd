@@ -2,11 +2,16 @@
 title: "Informe concurso AsterionHouse"
 author: "Gazze Simón, Moresi Manuel, Santini Franco"
 date: "2025-08-12"
-output: html_document
+output: 
+  html_document:
+    theme: flatly
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, 
+                      warning = FALSE,
+                      message = FALSE, 
+                      fig.align = "center")
 ```
 
 # La Casa de Asterión: estimación de demanda y optimización de precios de artículos de venta minorista
@@ -88,7 +93,7 @@ sc <- spark_connect(master = "local", config = config)
 #    DATE_ID = to_date(DATE_ID),  # convertir a fecha
 #    DAY_OF_WEEK = date_format(DATE_ID, "E")  # "Mon", "Tue", ...
     # si querés número: DAY_OF_WEEK = date_format(DATE_ID, "u") # 1=lunes ... 7=domingo
-  )
+#  )
 
   # Paso 1: convertir DATE_ID a Date
   
@@ -115,6 +120,8 @@ ds_final <- open_dataset("./Datos/datos_final_1.parquet")
 
 print(colnames(ds_final))#Voy viendo que todas las variables esten
 
+ds_final = ds_final %>%
+  mutate(STORE_TYPE = if_else(is.na(STORE_TYPE), "Unknown", STORE_TYPE))
 ```
 
 ## Introducción
@@ -364,7 +371,7 @@ Se observan similitudes tanto en los precios iniciales promedio, como en los cos
 
 ### Objetivo 1 - Estimación de demanda
 
-bla bla bla- podemos hablar de que modelos vamos a usar en grandes rasgos, onda usaremos modelos de machine learning y series de tiempo para predecir la demanda.
+Para el desarrollo del Objetivo 1, se aplicarán técnicas de Machine Learning con el propósito de entrenar los datos y estimar la demanda de los distintos subproductos. Asimismo, se llevará a cabo un procedimiento de estimación de precios correspondiente a la semana de referencia para la generación de pronósticos. Estos valores estimados se incorporarán como variables explicativas en el modelo, con el objetivo de predecir de manera adecuada la demanda en la semana posterior al fin de los datos.
 
 #### Preprocesamiento de los datos - Objetivo 1
 
@@ -499,7 +506,7 @@ low = "white", high = "steelblue", name = "Demanda total por estado"
 theme(legend.position = "right")
 ```
 
-Se observa que los estados con mayor demanda monetaria se encuentran en la zona de la costa este de Estados Unidos,concentrandose en los estados de Nueva York, Florida, Georgia y Carolina del Sur. Pero este analisis inicial no necesariamente nos da una evidencia con respecto a que estos estados influyen en las ventas de las tiendas, debido a que hay distinta cantidad de tiendas en cada uno de estos. A continuación para tratar este problema, se vuelve a realizar este gráfico pero calculando la demanda promedio de cada uno de estos estados:
+Se observa que los estados con mayor demanda monetaria se encuentran en la zona de la costa este de Estados Unidos, concentrandose en los estados de Nueva York, Florida, Georgia y Carolina del Sur. Pero este analisis inicial no necesariamente brinda una evidencia con respecto a que dichos estados influyen en las ventas de las tiendas, debido a que hay distinta cantidad de tiendas en cada uno de estos. A continuación para tratar este problema, se vuelve a realizar este gráfico pero calculando la demanda promedio de cada uno de estos estados:
 
 
 ```{r}
@@ -509,14 +516,14 @@ low = "white", high = "steelblue", name = "Demanda promedio por estado"
 ) +
 theme(legend.position = "right")
 ```
-Al realizar esta modificación el panorama ya no es el mismo, se puede observar que los estados que mayor demanda promedio tienen estan en el suroeste y son los estados de Nuevo México y Arizona (contando con 2 y 5 tiendas respectivamente). Otra particularidad que no se evidenciaba en el otro gráfico es que los estados con menor demanda promedio se encuentran todos en la región noroeste del país, lo que nos lleva a pensar que puede que esa sea una zona con menor consumo.
+
+Al realizar esta modificación, el panorama ya no es el mismo y se puede observar que los estados que mayor demanda promedio tienen se ubican en el suroeste y son los estados de Nuevo México y Arizona (contando con 2 y 5 tiendas respectivamente). Otra particularidad que no se evidenciaba en el otro gráfico, es que los estados con menor demanda promedio se encuentran todos en la región noroeste del país, lo que nos lleva a pensar que puede que esa sea una zona con menor consumo.
 
 
 
 ```{r}
 # Conteo por subgrupo
 conteo_store_type <- ds_final %>%
-  mutate(STORE_TYPE = if_else(is.na(STORE_TYPE), "Unknown", STORE_TYPE)) %>%
   group_by(STORE_TYPE) %>%
   summarise(total_ventas = sum(TOTAL_SALES_, na.rm = TRUE)) %>%
   collect()
@@ -534,10 +541,9 @@ conteo_store_type = conteo_store_type %>%
 
 p1 <- plot_ly(
   conteo_store_type,
-  x = ~total_ventas,
-  y = ~reorder(STORE_TYPE, total_ventas),
+  y = ~total_ventas,
+  x = ~reorder(STORE_TYPE, total_ventas),
   type = "bar",
-  orientation = "h",
   name = "Demanda total ($)",
   marker = list(color = "steelblue")
 ) %>%
@@ -548,10 +554,9 @@ p1 <- plot_ly(
 
 p2 <- plot_ly(
   conteo_store_type,
-  x = ~cantidad_tiendas,
-  y = ~reorder(STORE_TYPE, total_ventas),
+  y = ~cantidad_tiendas,
+  x = ~reorder(STORE_TYPE, total_ventas),
   type = "bar",
-  orientation = "h",
   name = "Cantidad Tiendas",
   marker = list(color = "maroon")
 ) %>%
@@ -561,10 +566,29 @@ p2 <- plot_ly(
   )
 
 subplot(p1, p2, nrows = 2, shareY = TRUE, titleY = TRUE) %>%
-  layout(title = "Demanda total ($) y Cantidad de Tiendas por Tipo")
+  layout(title = "Demanda total ($) y Cantidad de Tiendas por Tipo",
+    xaxis = list(
+      tickfont = list(size = 10)
+    ),
+    xaxis2 = list(
+      tickfont = list(size = 10)
+    ),
+    legend = list(
+      font = list(
+        size = 8.5
+      )
+    ))
+
+# Centrar usando un div
+htmltools::tagList(
+  htmltools::tags$div(
+    style = "display: block; margin-left: auto; margin-right: auto; width: 80%;",
+    sp
+  )
+)
 ```
 
-Se puede apreciar con claridad que las tiendas de tipo Street y Mall son las que mayores demanda presentan, con la particularidad que existen las mismas cantidades de tiendas de estos tipos (44 cada uno), y sin embargo las de tipo Street tuvieron una demanda de $48.194.937 mayor. 
+Se puede apreciar con claridad que las tiendas de tipo *Street* y *Mall* son las que mayores demanda presentan, con la particularidad que existen las mismas cantidades de tiendas de estos tipos (44 cada uno), y sin embargo las de tipo *Street* tuvieron una demanda de $48.194.937 mayor. 
 
 Al analizar los gráficos, se observa de manera lógica que una mayor cantidad de tiendas se asocia con un incremento en la demanda.
 
@@ -586,12 +610,11 @@ conteo_brand = conteo_brand %>%
 
 #Gráfico de barras
 
-p1 <- plot_ly(
+p3 <- plot_ly(
   conteo_brand,
-  x = ~total_ventas,
-  y = ~reorder(BRAND, total_ventas),
+  y = ~total_ventas,
+  x = ~reorder(BRAND, total_ventas),
   type = "bar",
-  orientation = "h",
   name = "Demanda total ($)",
   marker = list(color = "steelblue")
 ) %>%
@@ -600,12 +623,11 @@ p1 <- plot_ly(
     yaxis = list(title = "Marca")
   )
 
-p2 <- plot_ly(
+p4 <- plot_ly(
   conteo_brand,
-  x = ~cantidad_tiendas,
-  y = ~reorder(BRAND, total_ventas),
+  y = ~cantidad_tiendas,
+  x = ~reorder(BRAND, total_ventas),
   type = "bar",
-  orientation = "h",
   name = "Cantidad Tiendas por Marca",
   marker = list(color = "maroon")
 ) %>%
@@ -614,11 +636,22 @@ p2 <- plot_ly(
     yaxis = list(title = "Marca")
   )
 
-subplot(p1, p2, nrows = 2, shareY = TRUE, titleY = TRUE) %>%
-  layout(title = "Demanda total ($) y Cantidad de Tiendas por Marca")
+subplot(p3, p4, nrows = 2, shareY = TRUE, titleY = TRUE) %>%
+  layout(title = "Demanda total ($) y Cantidad de Tiendas por Marca",
+    xaxis = list(
+      tickfont = list(size = 7.5)
+    ),
+    xaxis2 = list(
+      tickfont = list(size = 7.5)
+    ),
+    legend = list(
+      font = list(
+        size = 8.5
+      )
+    ))
 ```
 
-Se evidencia que la marca Essentials Plus es la que mayor demanda presenta, siendo también la marca con mayor cantidad de tiendas.
+Se evidencia que la marca *Essentials Plus* es la que mayor demanda presenta, siendo también la marca con mayor cantidad de tiendas.
 
 #### Técnicas estadísticas - Objetivo 1
 
