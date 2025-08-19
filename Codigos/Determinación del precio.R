@@ -123,61 +123,75 @@ datos_series_semanal <- datos_otra_forma |>
 # Guardamos los datos porque tarda mucho
 # write.csv(datos_series_semanal, "Datos/datos_series_semanal.csv", row.names = FALSE, quote = FALSE)
 
+# Lectura de los datos semanales
+df_series_completo <- read.csv("Datos/datos_series_semanal.csv")
+df_series_completo <- df_series_completo |> 
+  mutate(semanas_anio = paste(semana, anio, sep = "/"))
+
 # Creamos el data frame de las series diarias
-fechas_dias <- seq(ymd("2021-01-01"), ymd("2023-12-31"), by = "day")
+fechas_semanal <- seq(ymd("2021-01-01"), ymd("2023-12-31"), by = "week")
+semanas_anio <- paste(week(fechas_semanal), year(fechas_semanal), sep = "/")
 
 df <- expand.grid(STORE_ID = unique(df_series_completo$STORE_ID),
                   SUBGROUP = unique(df_series_completo$SUBGROUP),
-                  DATE_ID = fechas_dias)
+                  semanas_anio = semanas_anio)
 
-# Precio mediano de la serie dia a dia
+df_fechas <- data.frame(fecha = fechas_semanal,
+           semanas_anio =  paste(week(fechas_semanal), year(fechas_semanal), sep = "/"))
+
+# Precio mediano de la serie semana a semana
 datos_series_completo <- df |> 
-  left_join(df_series_completo, by = c("STORE_ID", "SUBGROUP", "DATE_ID")) |> 
+  left_join(df_series_completo, by = c("STORE_ID", "SUBGROUP", "semanas_anio")) |> 
+  select(-c(semana, anio)) |> 
   mutate(Median_price = ifelse(is.na(PRICE_), 0, PRICE_))
 
 datos_series_completo <- datos_series_completo |> 
-  mutate(mes = as.numeric(month(DATE_ID)),
-         date = ymd(DATE_ID)) |> 
-  dplyr::select(-c(DATE_ID, PRICE_)) |> 
+  left_join(df_fechas, by = "semanas_anio")
+
+# Datos de las series para trabajar con modelos SARIMA
+datos_series_completo <- datos_series_completo |> 
+  mutate(date = yearweek(fecha)) |> 
+  dplyr::select(-c(PRICE_, fecha)) |> 
   as_tsibble(
     key = c(STORE_ID, SUBGROUP),
     index = date,
     validate = T,
     regular = T)
 
-
 # Pipeline para ejecutar series de tiempo
 # Definimos un dataframe que sea el que contenga los precios
-resultado_precio <- data.frame(STORE_ID = character(),
-                               SUBGROUP = character(),
-                               .model = character(),
-                               date = double(),
-                               Median_price = list(),
-                               .mean = double())
-contador <- 0
-for(i in unique(datos_series_completo$STORE_ID)) {
-  for(j in unique(datos_series_completo$SUBGROUP)) {
-    contador <- contador + 1
-    
-    # Entrenamiento del modelo
-    modelo <- datos_series_completo |>
-      filter(STORE_ID == i & SUBGROUP == j) |>
-      model(auto = ARIMA(Median_price))
-    
-    # Predicción del modelo
-    resultado_precio <- rbind(resultado_precio, modelo |> forecast(h=7) |> filter(.model == "auto"))
-    
-    # Para ver en que serie va metemos un cat
-    cat("Se ajustó la serie N°", contador, "\n")
-  }
-}
+library(doParallel)
+num_cores <- parallel::detectCores() - 2
+cl <- makePSOCKcluster(num_cores)
+registerDoParallel(cl)
+
+resultado_precio <- foreach(i = unique(datos_series_completo$STORE_ID), 
+                            .combine = bind_rows,
+                            .packages = c("fable", "fabletools", "dplyr")) %:%
+  foreach(j = unique(datos_series_completo$SUBGROUP), 
+          .combine = bind_rows,
+          .packages = c("fable", "fabletools", "dplyr")) %dopar% {
+            
+            datos_filtro <- datos_series_completo |> 
+              filter(STORE_ID == i, SUBGROUP == j)
+            
+            if (nrow(datos_filtro) > 5) { # evitar errores con series muy cortas
+              modelo <- datos_filtro |> model(auto = ARIMA(Median_price))
+              pred <- modelo |> forecast(h = 1) |> filter(.model == "auto")
+              return(pred)
+            } else {
+              return(NULL)
+            }
+          }
+
+stopCluster(cl)
 
 # Guardamos las predicciones de los precios usando modelos SARIMA
 guardar <- data.frame(STORE_ID = resultado_precio$STORE_ID,
                       SUBGROUP = resultado_precio$SUBGROUP,
                       PRICE_ = resultado_precio$.mean)
 
-# write.csv(guardar, "Predicciones/precio_series.csv", row.names = FALSE, quote = FALSE)
+write.csv(guardar, "precio_series_semanal.csv", row.names = FALSE, quote = FALSE)
 
 ###################### Optimizar el precio de la serie maximizando la ganancia
 
