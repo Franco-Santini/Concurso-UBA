@@ -22,6 +22,7 @@ library(data.table)
 library(arrow)
 library(plotly)
 library(lubridate)
+library(usmap)
 
 eci_stores <- read_csv("Datos/eci_stores.csv")
 
@@ -47,44 +48,52 @@ sc <- spark_connect(master = "local", config = config)
 
 #ds <- open_dataset("eci_transactions.parquet")
 
-eci_transactions <- spark_read_parquet(sc, name = "eci_transacciones", path = "../eci_transactions.parquet")
+#eci_transactions <- spark_read_parquet(sc, name = "eci_transacciones", path = "../eci_transactions.parquet")
 
 #Para la base completa
 
 # Copiar tabla de tiendas y productos a Spark
 
-eci_product_master <- rename(eci_product_master, SKU = sku, SUBGROUP = subgroup)
-eci_stores_tbl   <- copy_to(sc, eci_stores,        name = "eci_stores",        overwrite = TRUE)
-eci_products_tbl <- copy_to(sc, eci_product_master, name = "eci_product_master", overwrite = TRUE)
+#eci_product_master <- rename(eci_product_master, SKU = sku, SUBGROUP = subgroup)
+#eci_stores_tbl   <- copy_to(sc, eci_stores,        name = "eci_stores",        overwrite = TRUE)
+#eci_products_tbl <- copy_to(sc, eci_product_master, name = "eci_product_master", overwrite = TRUE)
 
 #Agrego los costos y precios base
 
-datos_tbl <- eci_transactions %>%
-  left_join(eci_products_tbl, by = c("SKU", "SUBGROUP"))
+#datos_tbl <- eci_transactions %>%
+#  left_join(eci_products_tbl, by = c("SKU", "SUBGROUP"))
 
 #Agrupo por el día, subproducto y tienda.
 
 #print(colnames(datos_tbl))#Voy viendo que todas las variables esten
 
-datos_tbl <- datos_tbl %>%
-  mutate(QUANTITY = round(TOTAL_SALES / PRICE)) %>%
-  group_by(STORE_SUBGROUP_DATE_ID, category, group) %>%
-  summarise(
-    TOTAL_SALES_        = sum(TOTAL_SALES),
-    QUANTITY_           = sum(QUANTITY),
-    PRICE_              = sum(PRICE),
-    BASE_PRICE_         = sum(base_price),
-    INITIAL_TICKET_PRICE_ = sum(initial_ticket_price),
-    COSTOS_             = sum(costos)
-  ) %>%
-  ungroup() %>%
-  mutate(STORE_SUBGROUP_DATE_ID_2 = STORE_SUBGROUP_DATE_ID) %>%
-  tidyr::separate(STORE_SUBGROUP_DATE_ID_2, into = c("STORE_ID","SUBGROUP","DATE_ID"), sep = "_") %>%
-  left_join(eci_stores_tbl, by = "STORE_ID")
+#datos_tbl <- datos_tbl %>%
+#  mutate(QUANTITY = round(TOTAL_SALES / PRICE)) %>%
+#  group_by(STORE_SUBGROUP_DATE_ID, category, group) %>%
+#  summarise(
+#    TOTAL_SALES_        = sum(TOTAL_SALES),
+#    QUANTITY_           = sum(QUANTITY),
+#    PRICE_              = sum(PRICE),
+#    BASE_PRICE_         = sum(base_price),
+#    INITIAL_TICKET_PRICE_ = sum(initial_ticket_price),
+#    COSTOS_             = sum(costos)
+#  ) %>%
+#  ungroup() %>%
+#  mutate(STORE_SUBGROUP_DATE_ID_2 = STORE_SUBGROUP_DATE_ID) %>%
+#  tidyr::separate(STORE_SUBGROUP_DATE_ID_2, into = c("STORE_ID","SUBGROUP","DATE_ID"), sep = "_") #%>%
+#  left_join(eci_stores_tbl, by = "STORE_ID")
+
+#datos_tbl <- datos_tbl %>%
+#  mutate(
+#    DATE_ID = to_date(DATE_ID),  # convertir a fecha
+#    DAY_OF_WEEK = date_format(DATE_ID, "E")  # "Mon", "Tue", ...
+    # si querés número: DAY_OF_WEEK = date_format(DATE_ID, "u") # 1=lunes ... 7=domingo
+  )
+
   # Paso 1: convertir DATE_ID a Date
   
 
-print(colnames(datos_tbl))#Voy viendo que todas las variables esten
+#print(colnames(datos_tbl))#Voy viendo que todas las variables esten
 
 #Observo la cantidad de filas
 
@@ -92,17 +101,17 @@ print(colnames(datos_tbl))#Voy viendo que todas las variables esten
 
 #Obtengo el archivo .parquet de la base que usaremos para el objetivo 1
 
-spark_write_parquet(
-  datos_tbl,
-  path = "Datos/datos_final.parquet",
-  mode = "overwrite"  # o "append" si querés agregar
-)
+#spark_write_parquet(
+#  datos_tbl,
+#  path = "Datos/datos_final.parquet",
+#  mode = "overwrite"  # o "append" si querés agregar
+#)
 
 transactions_df <- read.csv("Datos/eci_transactions.csv", nrows = 6)
 
 #Leo el archivo final y empiezo a hacer consultas
 
-ds_final <- open_dataset("../Datos/datos_final.parquet")
+ds_final <- open_dataset("./Datos/datos_final_1.parquet")
 
 print(colnames(ds_final))#Voy viendo que todas las variables esten
 
@@ -462,14 +471,175 @@ p <- ventas_mensuales %>%
 p
 ```
 
+3 encuentran picos de ventas entre abril y mayo de 2022
+
+otros 3 encuentran picos en julio de 2022
+
+Se procede a analizar la demanda en las distintas regiones geográficas en las cuales pertenecen estas tiendas:
+
 ```{r}
+ventas_estado <- ds_final %>%
+group_by(STATE) %>%
+summarise(total_sales = sum(TOTAL_SALES_),
+cant_stores = n_distinct(STORE_ID),
+.groups = "drop"
+)
+ 
+# unir las ventas con el mapa de estados
+plot_data <- ventas_estado %>%
+mutate(state = STATE,
+ventas_tiendas = total_sales/cant_stores) %>%
+collect()
 
 
-
-
-
+plot_usmap(data = plot_data, values = "total_sales", regions = "states") +
+scale_fill_continuous(
+low = "white", high = "steelblue", name = "Demanda total por estado"
+) +
+theme(legend.position = "right")
 ```
 
+Se observa que los estados con mayor demanda monetaria se encuentran en la zona de la costa este de Estados Unidos,concentrandose en los estados de Nueva York, Florida, Georgia y Carolina del Sur. Pero este analisis inicial no necesariamente nos da una evidencia con respecto a que estos estados influyen en las ventas de las tiendas, debido a que hay distinta cantidad de tiendas en cada uno de estos. A continuación para tratar este problema, se vuelve a realizar este gráfico pero calculando la demanda promedio de cada uno de estos estados:
+
+
+```{r}
+plot_usmap(data = plot_data, values = "ventas_tiendas", regions = "states") +
+scale_fill_continuous(
+low = "white", high = "steelblue", name = "Demanda promedio por estado"
+) +
+theme(legend.position = "right")
+```
+Al realizar esta modificación el panorama ya no es el mismo, se puede observar que los estados que mayor demanda promedio tienen estan en el suroeste y son los estados de Nuevo México y Arizona (contando con 2 y 5 tiendas respectivamente). Otra particularidad que no se evidenciaba en el otro gráfico es que los estados con menor demanda promedio se encuentran todos en la región noroeste del país, lo que nos lleva a pensar que puede que esa sea una zona con menor consumo.
+
+
+
+```{r}
+# Conteo por subgrupo
+conteo_store_type <- ds_final %>%
+  mutate(STORE_TYPE = if_else(is.na(STORE_TYPE), "Unknown", STORE_TYPE)) %>%
+  group_by(STORE_TYPE) %>%
+  summarise(total_ventas = sum(TOTAL_SALES_, na.rm = TRUE)) %>%
+  collect()
+
+conteo_tiendas = eci_stores %>%
+  mutate(STORE_TYPE = if_else(is.na(STORE_TYPE), "Unknown", STORE_TYPE)) %>%
+  group_by(STORE_TYPE) %>%
+  summarise(cantidad_tiendas = n())
+
+conteo_store_type = conteo_store_type %>%
+  left_join(conteo_tiendas, by = "STORE_TYPE")
+
+
+#Gráfico de barras
+
+p1 <- plot_ly(
+  conteo_store_type,
+  x = ~total_ventas,
+  y = ~reorder(STORE_TYPE, total_ventas),
+  type = "bar",
+  orientation = "h",
+  name = "Demanda total ($)",
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    xaxis = list(title = "Demanda total ($)"),
+    yaxis = list(title = "Tipo de Tienda")
+  )
+
+p2 <- plot_ly(
+  conteo_store_type,
+  x = ~cantidad_tiendas,
+  y = ~reorder(STORE_TYPE, total_ventas),
+  type = "bar",
+  orientation = "h",
+  name = "Cantidad Tiendas",
+  marker = list(color = "maroon")
+) %>%
+  layout(
+    xaxis = list(title = "Cantidad de Tiendas"),
+    yaxis = list(title = "Tipo de Tienda")
+  )
+
+subplot(p1, p2, nrows = 2, shareY = TRUE, titleY = TRUE) %>%
+  layout(title = "Demanda total ($) y Cantidad de Tiendas por Tipo")
+```
+
+Se puede apreciar con claridad que las tiendas de tipo Street y Mall son las que mayores demanda presentan, con la particularidad que existen las mismas cantidades de tiendas de estos tipos (44 cada uno), y sin embargo las de tipo Street tuvieron una demanda de $48.194.937 mayor. 
+
+Al analizar los gráficos, se observa de manera lógica que una mayor cantidad de tiendas se asocia con un incremento en la demanda.
+
+
+```{r}
+# Conteo por brand
+conteo_brand <- ds_final %>%
+  group_by(BRAND) %>%
+  summarise(total_ventas = sum(TOTAL_SALES_, na.rm = TRUE)) %>%
+  collect()
+
+conteo_franquicia = eci_stores %>%
+  group_by(BRAND) %>%
+  summarise(cantidad_tiendas = n())
+
+conteo_brand = conteo_brand %>%
+  left_join(conteo_franquicia, by = "BRAND")
+
+
+#Gráfico de barras
+
+p1 <- plot_ly(
+  conteo_brand,
+  x = ~total_ventas,
+  y = ~reorder(BRAND, total_ventas),
+  type = "bar",
+  orientation = "h",
+  name = "Demanda total ($)",
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    xaxis = list(title = "Demanda total ($)"),
+    yaxis = list(title = "Marca")
+  )
+
+p2 <- plot_ly(
+  conteo_brand,
+  x = ~cantidad_tiendas,
+  y = ~reorder(BRAND, total_ventas),
+  type = "bar",
+  orientation = "h",
+  name = "Cantidad Tiendas por Marca",
+  marker = list(color = "maroon")
+) %>%
+  layout(
+    xaxis = list(title = "Cantidad de Tiendas"),
+    yaxis = list(title = "Marca")
+  )
+
+subplot(p1, p2, nrows = 2, shareY = TRUE, titleY = TRUE) %>%
+  layout(title = "Demanda total ($) y Cantidad de Tiendas por Marca")
+```
+
+Se evidencia que la marca Essentials Plus es la que mayor demanda presenta, siendo también la marca con mayor cantidad de tiendas.
 
 #### Técnicas estadísticas - Objetivo 1
+
+#### Resultados - Objetivo 1
+
+### Objetivo 2 - Optimización de precios
+
+bla bla bla
+
+#### Preprocesamiento de los datos - Objetivo 2
+
+calculo de la ganancia y bla bla bla
+
+#### Análisis descriptivo - Objetivo 2
+
+#### Técnicas estadísticas - Objetivo 2
+
+#### Resultados - Objetivo 2
+
+## Resultados generales y conclusiones
+
+
+
 
