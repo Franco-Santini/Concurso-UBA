@@ -118,7 +118,7 @@ transactions_df <- read.csv("Datos/eci_transactions.csv", nrows = 6)
 
 ds_final <- open_dataset("./Datos/datos_final_1.parquet")
 
-#print(colnames(ds_final))#Voy viendo que todas las variables esten
+print(colnames(ds_final))#Voy viendo que todas las variables esten
 
 ds_final = ds_final %>%
   mutate(STORE_TYPE = if_else(is.na(STORE_TYPE), "Unknown", STORE_TYPE))
@@ -702,7 +702,7 @@ Se evidencia que la marca *Essentials Plus* es la que mayor demanda presenta, si
 
 Como se mencionó previamente, la Casa de Asterión necesita mejorar su estrategia de precios, ya que se ha observado una disminución en las ganancias y desea entender cómo ajustar sus precios para optimizar la demanda y el margen de ganancias de sus productos. 
 
-Luego de crear un modelo predictivo de la demanda, se deberán identificar los precios óptimos para cada producto que maximicen la ganancia. Esto implica encontrar el equilibrio adecuado entre el precio y la demanda para asegurar que la empresa obtenga el mayor rendimiento posible.
+Luego de crear un modelo predictivo de la cantidad de ventas, se deberán identificar los precios óptimos para cada producto que maximicen la ganancia. Esto implica encontrar el equilibrio adecuado entre el precio y la demanda para asegurar que la empresa obtenga el mayor rendimiento posible.
 
 
 #### Preprocesamiento de los datos - Objetivo 2

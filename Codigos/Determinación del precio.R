@@ -6,6 +6,7 @@ library(lubridate)
 library(rlang)
 library(tidyr)
 library(fpp3)
+library(zoo)
 # library(tidymodels) 
 # library(modeltime)
 # library(timetk)
@@ -124,7 +125,7 @@ datos_series_semanal <- datos_otra_forma |>
 # write.csv(datos_series_semanal, "Datos/datos_series_semanal.csv", row.names = FALSE, quote = FALSE)
 
 # Lectura de los datos semanales
-df_series_completo <- read.csv("Datos/datos_series_semanal.csv")
+df_series_completo <- read.csv("Codigos/Datos/datos_series_semanal.csv")
 df_series_completo <- df_series_completo |> 
   mutate(semanas_anio = paste(semana, anio, sep = "/"))
 
@@ -140,13 +141,42 @@ df_fechas <- data.frame(fecha = fechas_semanal,
            semanas_anio =  paste(week(fechas_semanal), year(fechas_semanal), sep = "/"))
 
 # Precio mediano de la serie semana a semana
-datos_series_completo <- df |> 
-  left_join(df_series_completo, by = c("STORE_ID", "SUBGROUP", "semanas_anio")) |> 
-  select(-c(semana, anio)) |> 
-  mutate(Median_price = ifelse(is.na(PRICE_), 0, PRICE_))
+# datos_series_completo <- df |> 
+#   left_join(df_series_completo, by = c("STORE_ID", "SUBGROUP", "semanas_anio")) |> 
+#   select(-c(semana, anio)) |> 
+#   mutate(Median_price = ifelse(is.na(PRICE_), 0, PRICE_))
+
+datos_series_completo <- df %>%
+  # unir con la serie de precios
+  left_join(df_series_completo, by = c("STORE_ID", "SUBGROUP", "semanas_anio")) %>%
+  select(-c(semana, anio)) %>%   # quitar columnas que no necesitamos
+  # separar semana y año para ordenar correctamente
+  mutate(
+    semana_num = as.numeric(sub("/.*", "", semanas_anio)),
+    anio_num   = as.numeric(sub(".*/", "", semanas_anio)),
+    semana_orden = anio_num * 100 + semana_num   # ej: 202101, 202102...
+  ) %>%
+  group_by(STORE_ID, SUBGROUP) %>%
+  arrange(semana_orden) %>%
+  # copiar la columna de precios original para trabajar
+  mutate(Median_price = PRICE_) %>%
+  # interpolación lineal de NA entre semanas
+  mutate(Median_price = zoo::na.approx(Median_price, na.rm = FALSE)) %>%
+  # rellenar NA al inicio y al final si no hay vecinos
+  mutate(
+    Median_price = ifelse(is.na(Median_price), zoo::na.locf(Median_price, na.rm = FALSE), Median_price),
+    Median_price = ifelse(is.na(Median_price), zoo::na.locf(Median_price, fromLast = TRUE), Median_price)
+  ) %>%
+  ungroup() %>%
+  select(-semana_num, -anio_num, -semana_orden)
+
 
 datos_series_completo <- datos_series_completo |> 
   left_join(df_fechas, by = "semanas_anio")
+
+#Guardo datos
+
+#write.csv(datos_series_completo, "Datos/datos_series_semanal_nuevo.csv", row.names = FALSE, quote = FALSE)
 
 # Datos de las series para trabajar con modelos SARIMA
 datos_series_completo <- datos_series_completo |> 
@@ -194,7 +224,5 @@ guardar <- data.frame(STORE_ID = resultado_precio$STORE_ID,
 write.csv(guardar, "precio_series_semanal.csv", row.names = FALSE, quote = FALSE)
 
 ###################### Optimizar el precio de la serie maximizando la ganancia
-
-
 
 
