@@ -146,28 +146,28 @@ df_fechas <- data.frame(fecha = fechas_semanal,
 #   select(-c(semana, anio)) |> 
 #   mutate(Median_price = ifelse(is.na(PRICE_), 0, PRICE_))
 
-datos_series_completo <- df %>%
+datos_series_completo <- df |> 
   # unir con la serie de precios
-  left_join(df_series_completo, by = c("STORE_ID", "SUBGROUP", "semanas_anio")) %>%
-  select(-c(semana, anio)) %>%   # quitar columnas que no necesitamos
+  left_join(df_series_completo, by = c("STORE_ID", "SUBGROUP", "semanas_anio")) |> 
+  select(-c(semana, anio)) |>    # quitar columnas que no necesitamos
   # separar semana y año para ordenar correctamente
   mutate(
     semana_num = as.numeric(sub("/.*", "", semanas_anio)),
     anio_num   = as.numeric(sub(".*/", "", semanas_anio)),
     semana_orden = anio_num * 100 + semana_num   # ej: 202101, 202102...
-  ) %>%
-  group_by(STORE_ID, SUBGROUP) %>%
-  arrange(semana_orden) %>%
+  ) |> 
+  group_by(STORE_ID, SUBGROUP) |> 
+  arrange(semana_orden) |> 
   # copiar la columna de precios original para trabajar
-  mutate(Median_price = PRICE_) %>%
+  mutate(Median_price = PRICE_) |> 
   # interpolación lineal de NA entre semanas
-  mutate(Median_price = zoo::na.approx(Median_price, na.rm = FALSE)) %>%
+  mutate(Median_price = zoo::na.approx(Median_price, na.rm = FALSE)) |> 
   # rellenar NA al inicio y al final si no hay vecinos
   mutate(
     Median_price = ifelse(is.na(Median_price), zoo::na.locf(Median_price, na.rm = FALSE), Median_price),
     Median_price = ifelse(is.na(Median_price), zoo::na.locf(Median_price, fromLast = TRUE), Median_price)
-  ) %>%
-  ungroup() %>%
+  ) |> 
+  ungroup() |> 
   select(-semana_num, -anio_num, -semana_orden)
 
 
@@ -178,8 +178,12 @@ datos_series_completo <- datos_series_completo |>
 
 #write.csv(datos_series_completo, "Datos/datos_series_semanal_nuevo.csv", row.names = FALSE, quote = FALSE)
 
+# Lectura de los datos series semanales
+datos_series_completo <- read.csv("Datos/datos_series_semanal_nuevo.csv")
+
 # Datos de las series para trabajar con modelos SARIMA
 datos_series_completo <- datos_series_completo |> 
+  mutate(fecha = as_date(fecha)) |> 
   mutate(date = yearweek(fecha)) |> 
   dplyr::select(-c(PRICE_, fecha)) |> 
   as_tsibble(
@@ -221,7 +225,90 @@ guardar <- data.frame(STORE_ID = resultado_precio$STORE_ID,
                       SUBGROUP = resultado_precio$SUBGROUP,
                       PRICE_ = resultado_precio$.mean)
 
-write.csv(guardar, "precio_series_semanal.csv", row.names = FALSE, quote = FALSE)
+# write.csv(guardar, "precio_series_semanal_ultimo.csv", row.names = FALSE, quote = FALSE)
+
+# Datos diarios
+datos_series_diarios <- read.csv("Datos/datos_series_diarios.csv")
+datos_series_diarios$DATE_ID <- as_date(datos_series_diarios$DATE_ID)
+
+# DataFrame que contenga todas las combinaciones
+fechas_dias <- seq(ymd("2021-01-01"), ymd("2023-12-31"), by = "day")
+df <- expand.grid(STORE_ID = unique(datos_series_diarios$STORE_ID),
+                  SUBGROUP = unique(datos_series_diarios$SUBGROUP),
+                  DATE_ID = fechas_dias)
+
+# Datos diarios completos
+datos_series_diario_completo <- df |> 
+  # unir con la serie de precios
+  left_join(datos_series_diarios, by = c("STORE_ID", "SUBGROUP", "DATE_ID")) |> 
+  # separar semana y año para ordenar correctamente
+  mutate(
+    dia_num = as.numeric(day(DATE_ID)),
+    semana_num = as.numeric(week(DATE_ID)),
+    anio_num   = as.numeric(year(DATE_ID)),
+    orden = anio_num * 10000 + semana_num * 100 + dia_num
+  ) |> 
+  group_by(STORE_ID, SUBGROUP) |> 
+  arrange(orden) |> 
+  # copiar la columna de precios original para trabajar
+  mutate(Median_price = PRICE_) |> 
+  # interpolación lineal de NA entre semanas
+  mutate(Median_price = zoo::na.approx(Median_price, na.rm = FALSE)) |> 
+  # rellenar NA al inicio y al final si no hay vecinos
+  mutate(
+    Median_price = ifelse(is.na(Median_price), zoo::na.locf(Median_price, na.rm = FALSE), Median_price),
+    Median_price = ifelse(is.na(Median_price), zoo::na.locf(Median_price, fromLast = TRUE), Median_price)
+  ) |> 
+  ungroup() |> 
+  select(-semana_num, -anio_num, -orden, -dia_num)
+
+# Guardo los datos diarios
+# write.csv(datos_series_diario_completo, "Datos/precio_series_diarios_nuevo.csv", row.names = FALSE, quote = FALSE)
+
+# Datos de las series para trabajar con modelos SARIMA
+datos_series_diarios_completo <- datos_series_diario_completo |> 
+  mutate(date = ymd(DATE_ID)) |> 
+  dplyr::select(-c(PRICE_, DATE_ID)) |> 
+  as_tsibble(
+    key = c(STORE_ID, SUBGROUP),
+    index = date,
+    validate = T,
+    regular = T)
+
+# Pipeline para ejecutar series de tiempo
+# Definimos un dataframe que sea el que contenga los precios
+library(doParallel)
+num_cores <- parallel::detectCores() - 2
+cl <- makePSOCKcluster(num_cores)
+registerDoParallel(cl)
+
+resultado_precio_diario <- foreach(i = unique(datos_series_diarios_completo$STORE_ID), 
+                            .combine = bind_rows,
+                            .packages = c("fable", "fabletools", "dplyr")) %:%
+  foreach(j = unique(datos_series_diarios_completo$SUBGROUP), 
+          .combine = bind_rows,
+          .packages = c("fable", "fabletools", "dplyr")) %dopar% {
+            
+            datos_filtro <- datos_series_diarios_completo |> 
+              filter(STORE_ID == i, SUBGROUP == j)
+            
+            if (nrow(datos_filtro) > 5) { # evitar errores con series muy cortas
+              modelo <- datos_filtro |> model(auto = ARIMA(Median_price))
+              pred <- modelo |> forecast(h = 7) |> filter(.model == "auto")
+              return(pred)
+            } else {
+              return(NULL)
+            }
+          }
+
+stopCluster(cl)
+
+# Guardamos las predicciones de los precios usando modelos SARIMA
+guardar_diario <- data.frame(STORE_ID = resultado_precio_diario$STORE_ID,
+                             SUBGROUP = resultado_precio_diario$SUBGROUP,
+                             PRICE_ = resultado_precio_diario$.mean)
+
+write.csv(guardar_diario, "precio_series_diario_ultimo.csv", row.names = FALSE, quote = FALSE)
 
 ###################### Optimizar el precio de la serie maximizando la ganancia
 
