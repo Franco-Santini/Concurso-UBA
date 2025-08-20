@@ -7,6 +7,8 @@ library(rlang)
 library(tidyr)
 library(arrow)
 library(sparkxgb)
+library(ParBayesianOptimization) # Optimización de hiperparámetros tipo OPTUNA
+
 
 # Configuraciones de spark
 config <- spark_config()
@@ -116,6 +118,7 @@ datos_otra_forma <- datos_otra_forma |>
   select(!c(ADDRESS1, ADDRESS2, STATE, ZIP, OPENDATE, CLOSEDATE, CLUSTER)) |> 
   mutate(mes = month(as_date(DATE_ID)),
          dia = day(as_date(DATE_ID)),
+         anio = year(as_date(DATE_ID)),
          STORE_TYPE = if_else(is.na(STORE_TYPE), "Unknown", STORE_TYPE))
 
 # Obtenemos la media y el desvio de PRICE_
@@ -127,11 +130,6 @@ price_media_sd <- datos_otra_forma |>
   ) |> 
   collect()
 
-# Estandarizamos la variable
-datos_otra_forma <- datos_otra_forma |> 
-  mutate(PRICE_est = ((PRICE_ - !!price_media_sd$price_mean) / !!price_media_sd$price_sd))
-
-
 prom_dia_mes <- datos_otra_forma |> 
   mutate(dia = day(as_date(DATE_ID))) |>
   filter(dia <= 7 & mes == 1) |> 
@@ -141,15 +139,89 @@ prom_dia_mes <- datos_otra_forma |>
   collect()
 
 # Division de la validacion de los datos pero agrupados por dia
-# Definimos los 5 folds para la validacion cruzada
-kfold_2 <- sdf_random_split(datos_otra_forma,
-                            weights = purrr::set_names(rep(0.2, 5), paste0("fold", 1:5)),
-                            seed = 115)
+# Definimos la división en datos de entrenamiento y testeo (80 - 20)
+datos_entrenamiento <- sdf_random_split(datos_otra_forma, train = 0.85, test = 0.15, seed = 151213)
 
-# Separacion entre train y test
-train_set_2 <- do.call(rbind, kfold_2[2:5])
-validation_set_2 <- kfold_2[[1]]
+# Dentro de los datos de entrenamiento (train_df) hacemos la optimización de hiperparámetros del modelo
+set.seed(202123) # Garantizar la reproducibilidad de los resultados
 
+# Crear columna fold (del 1 al 4)
+datos_cv <- datos_entrenamiento$train |> 
+  mutate(fold = floor(rand() * 4) + 1)
+
+scoring_function <- function(num_trees, min_instances) { 
+  r2_scores <- c() 
+  for (k in 1:4) { # Split en train/valid según fold 80% entrenamiento - 20% validacion 
+    train_fold <- datos_cv %>% filter(fold != k) 
+    valid_fold <- datos_cv %>% filter(fold == k) 
+    
+    # Entrenar RF 
+    rf_model <- ml_random_forest_regressor( 
+      train_fold, 
+      TOTAL_SALES_ ~ PRICE_ + SUBGROUP + STORE_TYPE + REGION + STORE_ID + mes + dia + anio + category + group + BRAND, 
+      num_trees = as.integer(num_trees), 
+      max_depth = 5, 
+      max_bins = 40, 
+      min_instances_per_node = as.integer(min_instances), 
+      subsampling_rate = 0.8, 
+      feature_subset_strategy = "onethird")
+    
+    #Predicciones en validación 
+    pred <- ml_predict(rf_model, valid_fold) 
+    
+    # Evaluar R2 
+    r2 <- ml_regression_evaluator( 
+      pred, 
+      label_col = "TOTAL_SALES_", 
+      prediction_col = "prediction", 
+      metric_name = "r2" 
+    ) 
+    
+    r2_scores <- c(r2_scores, r2) 
+    
+  } 
+  
+  # Promedio de los 4 folds 
+  mean_r2 <- mean(r2_scores) 
+  sd_r2 <- sd(r2_scores) 
+  
+  # ParBayesianOptimization espera lista con Score 
+  list(Score = mean_r2, Score_sd = sd_r2, Pred = 0) 
+  
+} 
+
+# Optimizacion 
+bounds <- list(
+  num_trees = c(70L, 225L), 
+  min_instances = c(5L, 10L) 
+) 
+
+opt_res <- bayesOpt( 
+  FUN = scoring_function, 
+  bounds = bounds, 
+  initPoints = 3, # puntos iniciales (exploración) 
+  iters.n = 6 # iteraciones de optimización
+)
+
+# Obtencion de mejor parámetro
+params <- getBestPars(opt_res)
+
+# Resumen de los resultados
+resumen <- opt_res$scoreSummary
+
+# Entrenamiento del modelo con todos los datos y los mejores hiperparámetros
+rf_model_def <- ml_random_forest_regressor( 
+  datos_otra_forma, 
+  TOTAL_SALES_ ~ PRICE_ + SUBGROUP + STORE_TYPE + REGION + STORE_ID + mes + dia + anio + category + group + BRAND, 
+  num_trees = as.integer(params$num_trees), 
+  max_depth = 5, 
+  max_bins = 40, 
+  min_instances_per_node = as.integer(params$min_instances), 
+  subsampling_rate = 0.8, 
+  feature_subset_strategy = "onethird")
+
+
+#################
 
 cant_stores_subg <- datos_otra_forma |> 
   group_by(STORE_ID, SUBGROUP) |> 
@@ -489,7 +561,8 @@ precio_mediano <- datos_otra_forma |>
   ungroup() |> 
   collect()
 
-precio_series <- read.csv("Predicciones/precio_series.csv")
+# Lectura de los datos de los precios predichos
+precio_series <- read.csv("Datos/precio")
 
 precio_mediano <- precio_mediano |> 
   left_join(precio_series, by = c("STORE_ID", "SUBGROUP")) |> 
