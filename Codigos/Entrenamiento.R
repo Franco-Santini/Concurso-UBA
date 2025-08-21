@@ -12,14 +12,19 @@ library(ParBayesianOptimization) # Optimización de hiperparámetros tipo OPTUNA
 
 # Configuraciones de spark
 config <- spark_config()
+config$spark.driver.memory <- "12g"   # subir memoria del driver
+config$spark.executor.memory <- "12g" # igual en el executor (en local son el mismo proceso)
+config$spark.memory.fraction <- 0.8
+config$spark.sql.shuffle.partitions <- 8
+config$spark.executor.cores <- 4
 # Driver (R) -> Spark
-config$spark.driver.memory <- "2g"
-config$spark.driver.memoryOverhead <- "512m"
-config$spark.executor.instances <- 2     # Máximo 2 instancias en local
-config$spark.executor.memory <- "2g"
-config$spark.executor.memoryOverhead <- "512m"
-config$spark.executor.cores <- 2         # Aprovecha CPU sin saturar RAM
-config$spark.sql.shuffle.partitions <- 50
+# config$spark.driver.memory <- "2g"
+# config$spark.driver.memoryOverhead <- "512m"
+# config$spark.executor.instances <- 2     # Máximo 2 instancias en local
+# config$spark.executor.memory <- "2g"
+# config$spark.executor.memoryOverhead <- "512m"
+# config$spark.executor.cores <- 2         # Aprovecha CPU sin saturar RAM
+# config$spark.sql.shuffle.partitions <- 50
 
 # Establecemos la coneccion con spark
 sc <- spark_connect(master = "local", config = config)
@@ -218,9 +223,19 @@ rf_model_def <- ml_random_forest_regressor(
   max_bins = 40, 
   min_instances_per_node = as.integer(params$min_instances), 
   subsampling_rate = 0.8, 
+  seed = 250,
   feature_subset_strategy = "onethird")
 
+predicciones_rf <- rf_model_def |> 
+  ml_predict(datos_otra_forma) |> 
+  select(TOTAL_SALES_, prediction, starts_with("probability_")) |> 
+  glimpse()
 
+r2 <- ml_regression_evaluator(predicciones_rf, 
+                              label_col = "TOTAL_SALES_", 
+                              prediction_col = "prediction",
+                              metric_name = "r2")
+      
 #################
 
 cant_stores_subg <- datos_otra_forma |> 
