@@ -544,6 +544,7 @@ mutate(state = STATE,
 ventas_tiendas = total_sales/cant_stores) %>%
 collect()
 
+options(scipen = 999)
 
 plot_usmap(data = plot_data, values = "total_sales", regions = "states") +
 scale_fill_continuous(
@@ -556,6 +557,8 @@ Se observa que los estados con mayor demanda monetaria se encuentran en la zona 
 
 
 ```{r}
+options(scipen = 999)
+
 plot_usmap(data = plot_data, values = "ventas_tiendas", regions = "states") +
 scale_fill_continuous(
 low = "white", high = "steelblue", name = "Demanda promedio por estado"
@@ -588,7 +591,7 @@ conteo_store_type = conteo_store_type %>%
 p1 <- plot_ly(
   conteo_store_type,
   y = ~total_ventas,
-  x = ~reorder(STORE_TYPE, total_ventas),
+  x = ~reorder(STORE_TYPE, -total_ventas),
   type = "bar",
   name = "Demanda total ($)",
   marker = list(color = "steelblue")
@@ -601,7 +604,7 @@ p1 <- plot_ly(
 p2 <- plot_ly(
   conteo_store_type,
   y = ~cantidad_tiendas,
-  x = ~reorder(STORE_TYPE, total_ventas),
+  x = ~reorder(STORE_TYPE, -total_ventas),
   type = "bar",
   name = "Cantidad Tiendas",
   marker = list(color = "maroon")
@@ -652,7 +655,7 @@ conteo_brand = conteo_brand %>%
 p3 <- plot_ly(
   conteo_brand,
   y = ~total_ventas,
-  x = ~reorder(BRAND, total_ventas),
+  x = ~reorder(BRAND, -total_ventas),
   type = "bar",
   name = "Demanda total ($)",
   marker = list(color = "steelblue")
@@ -665,7 +668,7 @@ p3 <- plot_ly(
 p4 <- plot_ly(
   conteo_brand,
   y = ~cantidad_tiendas,
-  x = ~reorder(BRAND, total_ventas),
+  x = ~reorder(BRAND, -total_ventas),
   type = "bar",
   name = "Cantidad Tiendas por Marca",
   marker = list(color = "maroon")
@@ -693,7 +696,6 @@ subplot(p3, p4, nrows = 2, shareY = TRUE, titleY = TRUE) %>%
 Se evidencia que la marca *Essentials Plus* es la que mayor demanda presenta, siendo también la marca con mayor cantidad de tiendas.
 
 
-
 #### Técnicas estadísticas - Objetivo 1
 
 #### Resultados - Objetivo 1
@@ -710,6 +712,89 @@ Luego de crear un modelo predictivo de la cantidad de ventas, se deberán identi
 calculo de la ganancia y bla bla bla
 
 #### Análisis descriptivo - Objetivo 2
+
+```{r}
+df <- fread("Datos/eci_transactions.csv")  
+
+write_parquet(df, "eci_transactions.parquet")
+
+eci_transactions <- spark_read_parquet(sc, name = "eci_transacciones", path = "./eci_transactions.parquet")
+
+#Para la base completa
+
+# Copiar tabla de tiendas y productos a Spark
+
+eci_product_master <- rename(eci_product_master, SKU = sku, SUBGROUP = subgroup)
+eci_stores_tbl   <- copy_to(sc, eci_stores,        name = "eci_stores",        overwrite = TRUE)
+eci_products_tbl <- copy_to(sc, eci_product_master, name = "eci_product_master", overwrite = TRUE)
+
+#Agrego los costos y precios base
+
+datos_tbl_2 <- eci_transactions %>%
+ left_join(eci_products_tbl, by = c("SKU", "SUBGROUP")) %>%
+ left_join(eci_stores_tbl, by = "STORE_ID") %>%
+  select(-BRAND) %>%
+  mutate(
+   DATE = to_date(DATE),  # convertir a fecha
+   DAY_OF_WEEK = date_format(DATE, "E"),
+   STORE_TYPE = if_else(is.na(STORE_TYPE), "Unknown", STORE_TYPE)) # "Mon", "Tue", ... si querés número: DAY_OF_WEEK = date_format(DATE_ID, "u") # 1=lunes ... 7=domingo
+
+print(colnames(datos_tbl_2))#Voy viendo que todas las variables esten
+
+
+SKU_ganancia <- datos_tbl_2 %>%
+  mutate(GANANCIAS = TOTAL_SALES - QUANTITY*costos) %>%
+  group_by(product_name) %>%
+  summarise(GANANCIAS_ = sum(GANANCIAS)) %>% 
+  collect() %>%
+  slice_max(order_by = GANANCIAS_, n = 20) 
+  
+
+plot_ly(
+  SKU_ganancia,
+  y = ~GANANCIAS_,
+  x = ~reorder(product_name, -GANANCIAS_),
+  type = "bar",
+  name = "Ganancias",
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "Ganancias totales ($) por producto",
+    xaxis = list(title = "Producto",
+      tickfont = list(size = 9)),
+    yaxis = list(title = "Ganancias")
+  ) 
+
+```
+
+```{r}
+SKU_ganancia_prom <- datos_tbl_2 %>%
+  mutate(GANANCIAS = TOTAL_SALES - QUANTITY*costos) %>%
+  group_by(product_name) %>%
+  summarise(GANANCIAS_ = sum(GANANCIAS),
+            cantidad_prod = sum(QUANTITY)) %>% 
+  mutate(prom_ganancias = GANANCIAS_ / cantidad_prod) %>% 
+  collect() %>%
+  slice_max(order_by = prom_ganancias, n = 20) 
+
+
+plot_ly(
+  SKU_ganancia_prom,
+  y = ~prom_ganancias,
+  x = ~reorder(product_name, -prom_ganancias),
+  type = "bar",
+  name = "Ganancias promedio",
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "Ganancias promedio ($) por producto",
+    xaxis = list(title = "Producto",
+      tickfont = list(size = 9)),
+    yaxis = list(title = "Ganancias promedio")
+  ) 
+```
+
+
 
 #### Técnicas estadísticas - Objetivo 2
 
