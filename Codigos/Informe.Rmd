@@ -819,6 +819,46 @@ plot_ly(
   ) 
 ```
 
+```{r}
+top_20 <- datos_tbl_2 %>% 
+  mutate(GANANCIAS = TOTAL_SALES - QUANTITY*costos) %>%
+  group_by(product_name) %>%
+  summarise(GANANCIAS_ = sum(GANANCIAS)) %>%
+  arrange(desc(GANANCIAS_)) %>%
+  head(5)
+
+mensual_ganancia = datos_tbl_2 %>% 
+  mutate(GANANCIAS = TOTAL_SALES - QUANTITY*costos) %>%
+  mutate(DATE = as_date(DATE),
+         mes = month(DATE),
+         año = year(DATE)) %>% 
+  mutate(año_mes = to_date(concat_ws("-", año, lpad(mes, 2, "0"), "01"))) %>% 
+  group_by(product_name, año_mes) %>%
+  summarise(GANANCIAS_ = sum(GANANCIAS)) %>%
+  semi_join(top_20, by = "product_name") %>% 
+  collect()
+
+mensual_ganancia$año_mes <- as.Date(mensual_ganancia$año_mes)
+
+mensual_ganancia <- mensual_ganancia[order(mensual_ganancia$año_mes), ]
+
+plot_ly(
+  mensual_ganancia,
+  x = ~año_mes,
+  y = ~GANANCIAS_,
+  color = ~product_name,
+  type = 'scatter',
+  mode = 'lines'
+) %>%
+  layout(
+    title = "Evolución mensual de ganancias por producto",
+    xaxis = list(title = "Mes", tickformat = "%Y-%m"), 
+    yaxis = list(title = "Ganancia total"),
+    legend = list(title = list(text = "Producto"))
+  )   
+```
+
+
 #### Técnicas estadísticas - Objetivo 2
 
 ......
