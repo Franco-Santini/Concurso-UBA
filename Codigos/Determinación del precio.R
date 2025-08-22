@@ -121,28 +121,30 @@ datos_series_semanal <- datos_otra_forma |>
   ungroup() |> 
   collect()
 
-datos_series_semanal_ventas <- datos_otra_forma |>
+datos_series_diarios_ventas <- datos_otra_forma |>
   group_by(STORE_ID, SUBGROUP, DATE_ID) |> 
   summarise(TOTAL_SALES_ = sum(TOTAL_SALES_)) |> 
   ungroup() |> 
   collect()
 
-datos_parte_1 <- datos_series_semanal_ventas |>
+datos_parte_1 <- datos_series_diarios_ventas |>
                       mutate(DATE_ID = as_date(DATE_ID)) |>
                       filter(DATE_ID <= "2021-12-31") |>
                       collect()
 
-datos_parte_2 <- datos_series_semanal_ventas |>
+datos_parte_2 <- datos_series_diarios_ventas |>
   mutate(DATE_ID = as_date(DATE_ID)) |>
   filter(DATE_ID > "2021-12-31" & DATE_ID <= "2022-12-31")|>
   collect()
 
 datos_parte_3 <- datos_series_semanal_ventas |>
   mutate(DATE_ID = as_date(DATE_ID)) |>
-  filter(DATE_ID <= DATE_ID > "2022-12-31" & DATE_ID <= "2023-12-31") |>
+  filter(DATE_ID > "2022-12-31" & DATE_ID <= "2023-12-31") |>
   collect()
 
-write.csv(rbind(datos_parte_1,datos_parte_2, datos_parte_3), "Datos/datos_series_diarios_ventas.csv")
+#write.csv(datos_parte_1, "Datos/datos_series_diarios_ventas_parte_1.csv")
+#write.csv(datos_parte_2, "Datos/datos_series_diarios_ventas_parte_2.csv")
+#write.csv(datos_parte_3, "Datos/datos_series_diarios_ventas_parte_3.csv")
 
 # Guardamos los datos porque tarda mucho
 # write.csv(datos_series_semanal, "Datos/datos_series_semanal.csv", row.names = FALSE, quote = FALSE)
