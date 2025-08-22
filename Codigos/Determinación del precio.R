@@ -13,13 +13,18 @@ library(zoo)
 
 # Configuraciones de spark
 config <- spark_config()
+config$spark.driver.memory <- "12g"   # subir memoria del driver
+config$spark.executor.memory <- "12g" # igual en el executor (en local son el mismo proceso)
+config$spark.memory.fraction <- 0.8
+config$spark.sql.shuffle.partitions <- 8
+config$spark.executor.cores <- 4
 # Driver (R) -> Spark
-config$spark.driver.memory <- "2g"
-# config$spark.driver.memoryOverhead <- "512m"
-config$spark.executor.instances <- 2     # Máximo 2 instancias en local
-config$spark.executor.memory <- "2g"
-# config$spark.executor.memoryOverhead <- "512m"
-config$spark.executor.cores <- 2         # Aprovecha CPU sin saturar RAM
+# config$spark.driver.memory <- "2g"
+# # config$spark.driver.memoryOverhead <- "512m"
+# config$spark.executor.instances <- 2     # Máximo 2 instancias en local
+# config$spark.executor.memory <- "2g"
+# # config$spark.executor.memoryOverhead <- "512m"
+# config$spark.executor.cores <- 2         # Aprovecha CPU sin saturar RAM
 
 # Establecemos la coneccion con spark
 sc <- spark_connect(master = "local", config = config)
@@ -124,18 +129,24 @@ datos_series_semanal <- datos_otra_forma |>
 datos_series_diarios_ventas <- datos_otra_forma |>
   group_by(STORE_ID, SUBGROUP, DATE_ID) |> 
   summarise(TOTAL_SALES_ = sum(TOTAL_SALES_)) |> 
-  ungroup() |> 
-  collect()
+  ungroup()
 
 datos_parte_1 <- datos_series_diarios_ventas |>
                       mutate(DATE_ID = as_date(DATE_ID)) |>
                       filter(DATE_ID <= "2021-12-31") |>
                       collect()
 
+<<<<<<< HEAD
 datos_parte_2 <- datos_series_diarios_ventas |>
   mutate(DATE_ID = as_date(DATE_ID)) |>
   filter(DATE_ID > "2021-12-31" & DATE_ID <= "2022-12-31")|>
   collect()
+=======
+datos_parte_2 <- datos_series_semanal_ventas |>
+                      mutate(DATE_ID = as_date(DATE_ID)) |>
+                      filter(DATE_ID > "2021-12-31" & DATE_ID <= "2022-12-31")|>
+                      collect()
+>>>>>>> 00861ae1205c73ac0d48ac2deb714cb52cef56b3
 
 datos_parte_3 <- datos_series_semanal_ventas |>
   mutate(DATE_ID = as_date(DATE_ID)) |>
@@ -337,5 +348,61 @@ guardar_diario <- data.frame(STORE_ID = resultado_precio_diario$STORE_ID,
 write.csv(guardar_diario, "precio_series_diario_ultimo.csv", row.names = FALSE, quote = FALSE)
 
 ###################### Optimizar el precio de la serie maximizando la ganancia
+df_max_ganancia <- eci_transactions_stores_prod |> 
+  mutate(QUANTITY = round(TOTAL_SALES/PRICE)) |> 
+  group_by(STORE_ID, SKU, DATE, BRAND, category, group, REGION) |>  # Datos agrupados por Tienda, sku y fecha
+  summarise(QUANTITY = sum(QUANTITY),
+            PRICE = min(PRICE),
+            TOTAL_SALES = sum(TOTAL_SALES),
+            costos = min(costos)) |> 
+  ungroup() |> 
+  mutate(valid = if_else(round(TOTAL_SALES - QUANTITY*PRICE) == 0, 1, 0), # Columna de validación
+         mes = as.character(month(DATE)),
+         anio = as.numeric(year(DATE))) 
 
+entrenamiento <- sdf_random_split(df_max_ganancia, train = 0.85, test = 0.15)
 
+gbmodel <- ml_gradient_boosted_trees(df_max_ganancia,
+                                     type = "regression",
+                                     response = "QUANTITY",
+                                     features = c("PRICE", "STORE_ID", "SKU", "category", "group", "BRAND"),
+                                     max_iter = 8)
+
+predicciones_glm <- gbmodel |> 
+  ml_predict(entrenamiento$test) |> 
+  select(QUANTITY, prediction, starts_with("probability_")) |> 
+  glimpse()
+
+# MAPE
+predicciones_glm |> 
+  mutate(
+    ape = abs((QUANTITY - prediction) / QUANTITY)   # Absolute Percentage Error
+  ) |> 
+  summarise(
+    MAPE = mean(ape) * 100
+  )
+
+# 1. Definimos un rango de precios (ejemplo: de 80% a 120% del precio actual)
+price_grid <- df_max_ganancia |> 
+  select(STORE_ID, SKU, PRICE, base_price, category, group, BRAND) |> 
+  mutate(min_price = PRICE * 0.8,
+         max_price = PRICE * 1.2) |> 
+  sdf_explode(col = "PRICE_SIM", vals = expr("sequence(min_price, max_price, (max_price - min_price)/20)"))
+# acá sequence genera 20 precios simulados por producto
+
+# 2. Predecir cantidad usando el modelo entrenado
+price_pred <- ml_predict(gbmodel, price_grid)
+
+# 3. Calcular ganancia esperada
+price_profit <- price_pred |> 
+  mutate(
+    profit = (PRICE_SIM - base_price) * prediction
+  )
+
+# 4. Seleccionar el precio óptimo por producto y tienda
+optimal_price <- price_profit |> 
+  group_by(STORE_ID, SKU) |> 
+  summarise(
+    best_price = first(PRICE_SIM[order_by(desc(profit))]),
+    best_profit = max(profit)
+  )

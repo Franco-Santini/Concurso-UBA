@@ -385,7 +385,7 @@ Sobre esta base consolidada, se generaron 3 nuevas variables temporales a partir
 
 Finalmente, las transacciones se agruparon por día, por subproducto y por tienda (`STORE_SUBGROUP_DATE_ID`), con el propósito de entrenar los datos de esa manera y asi poder cumplir el objetivo de predecir la demanda desde el 1/1/2024 al 7/1/2024 de los distintos subproductos, en cada una de las tiendas minoristas. También, como dato adicional, esto hace que se reduzca el costo computacional que conlleva entrenar los datos, debido a la reduccion de filas en la base que este agrupamiento implica, pasando de trabajar con 19.004.759 de datos a una base final con 5.137.958 de datos.
 
-En síntesis, el proceso de preparación de datos permitió pasar de múltiples bases dispersas a un único conjunto de datos estructurado, listo para ser utilizado en el entrenamiento de los modelos predictivos.
+En síntesis, el proceso de preparación de datos permitió pasar de múltiples bases dispersas a un único conjunto de datos estructurado, listo para ser utilizado en el entrenamiento de los modelos predictivos y para el análisis descriptivo que sigue a continuación.
 
 #### Análisis descriptivo - Objetivo 1
 
@@ -486,10 +486,9 @@ plot_ly(
 )
 ```
 
-Tal como se evidenciaba anteriormente, los productos relacionados a la electrónica son los que presentan mayor demanda en $, evidenciandose que los 9 productos que presentaban una mayor demanda que el resto se agrupan en los 3 "grupos": *Audio*, *Computing* y *Mobile*. Siendo además los 3 grupos que conforman la categoría *Electronics*.
+Tal como se evidenciaba anteriormente, los productos relacionados a la electrónica son los que presentan mayor demanda en \$, evidenciandose que los 9 productos que presentaban una mayor demanda que el resto se agrupan en los 3 "grupos": *Audio*, *Computing* y *Mobile*. Siendo además los 3 grupos que conforman la categoría *Electronics*.
 
 Otra variable que puede influir en la demanda de cada categoría es la fecha en la que se produjo la transacción, para esto se mostrará la evolución de la demanda a través de los meses en los 3 años que abarca este estudio, y complementariamente mostraremos la demanda por día de la semana.
-
 
 ```{r}
 # 1. Calcular ventas totales por subgrupo (para ordenar)
@@ -555,7 +554,6 @@ theme(legend.position = "right")
 
 Se observa que los estados con mayor demanda monetaria se encuentran en la zona de la costa este de Estados Unidos, concentrandose en los estados de Nueva York, Florida, Georgia y Carolina del Sur. Pero este analisis inicial no necesariamente brinda una evidencia con respecto a que dichos estados influyen en las ventas de las tiendas, debido a que hay distinta cantidad de tiendas en cada uno de estos. A continuación para tratar este problema, se vuelve a realizar este gráfico pero calculando la demanda promedio de cada uno de estos estados:
 
-
 ```{r}
 options(scipen = 999)
 
@@ -567,8 +565,6 @@ theme(legend.position = "right")
 ```
 
 Al realizar esta modificación, el panorama ya no es el mismo y se puede observar que los estados que mayor demanda promedio tienen se ubican en el suroeste y son los estados de Nuevo México y Arizona (contando con 2 y 5 tiendas respectivamente). Otra particularidad que no se evidenciaba en el otro gráfico, es que los estados con menor demanda promedio se encuentran todos en la región noroeste del país, lo que nos lleva a pensar que puede que esa sea una zona con menor consumo.
-
-
 
 ```{r}
 # Conteo por subgrupo
@@ -630,10 +626,9 @@ subplot(p1, p2, nrows = 2, shareY = TRUE, titleY = TRUE) %>%
 
 ```
 
-Se puede apreciar con claridad que las tiendas de tipo *Street* y *Mall* son las que mayores demanda presentan, con la particularidad que existen las mismas cantidades de tiendas de estos tipos (44 cada uno), y sin embargo las de tipo *Street* tuvieron una demanda de $48.194.937 mayor. 
+Se puede apreciar con claridad que las tiendas de tipo *Street* y *Mall* son las que mayores demanda presentan, con la particularidad que existen las mismas cantidades de tiendas de estos tipos (44 cada uno), y sin embargo las de tipo *Street* tuvieron una demanda de \$48.194.937 mayor.
 
 Al analizar los gráficos, se observa de manera lógica que una mayor cantidad de tiendas se asocia con un incremento en la demanda.
-
 
 ```{r}
 # Conteo por brand
@@ -695,21 +690,51 @@ subplot(p3, p4, nrows = 2, shareY = TRUE, titleY = TRUE) %>%
 
 Se evidencia que la marca *Essentials Plus* es la que mayor demanda presenta, siendo también la marca con mayor cantidad de tiendas.
 
-
 #### Técnicas estadísticas - Objetivo 1
+
+Antes de comenzar con el ajuste de modelos, se tiene en cuenta que la variable a predecir es cuantitativa, por lo que se opta por utilizar modelos de regresión. En primera instancia se consideraron varias alternativas, como regresión lineal, Random Forest, modelos de series de tiempo, entre otros. Sin embargo, dado el enfoque de predicción de cada uno de ellos, se decide trabajar con Random Forest para captar relaciones no lineales y predecir la demanda total de manera más eficiente, las variables explicativas consideradas fueron: `PRICE`, `SUBGROUP`, `STORE_TYPE`, `REGION`, `STORE_ID`, `mes`, `dia`, `año`, `category`, `group` y `BRAND`.
+
+Dado que Random Forest posee múltiples hiperparámetros, se lleva a cabo un proceso de optimización de los mismos. Para ello, se divide el conjunto de datos en 85% entrenamiento y 15% testeo. Dentro del 85% destinado a entrenamiento se realiza un proceso de validación cruzada con 4 "folds" con el objetivo de identificar aquellos hiperparámetros que maximizan el $R^2$. Luego, con el 15% restante se prueba el modelo ajustado con los hiperparámetros óptimos, verificando que el $R^2$ obtenido sea consistente con el alcanzado en el proceso de validación. Finalmente, se reentrenará el modelo con los hiperparámetros óptimos con la totalidad de los datos para posteriormente realizar la predicción de la demanda total.
+
+![](optimizacióndehiperparámetros.png)
+
+##### Random Forest + modelos ARIMA para la determinación del precio semanal
+
+En esta opción se plantea usar Random Forest para la predicción de la demanda total, y modelos de series de tiempo para la determinación del precio en el conjunto de datos a predecir. La justificación del uso de modelos de series temporales es porque éstos captan los patrones estacionales de los datos y usar esa información es una buena estrategia para determinar el precio.
+
+Se utilizaron 10950 modelos SARIMA que resultan de las combinaciones de las 150 tiendas y 73 subgrupos a predecir, las restantes 150 combinaciones son para las tiendas que venden subgrupos de productos de “Basketball” pero éstas son imputadas al precio que se venden los productos del “Baseball”, para modelar patrones semanales dado que se intuye que los precios en una semana de cada subgrupo de productos en cada tienda tienden a ser los mismos.
+
+Para la determinación del precio en cada subgrupo de productos y en cada tienda, se utilizó el precio mediano de cada producto vendido en ese subgrupo de productos, en cada tienda y semana del año, la utilización de la mediana se debe a que es más robusta ante datos extremos, con esto nos referimos a que va a ser un estimador más consistente del precio.
+
+Dado que había tiendas que no vendían todos los subgrupos de productos todas las semanas, en esas se uso un precio interpolado entre la semana previa y la semana siguiente dando a entender que el precio se comportó de forma estable, luego, si el precio al inicio de la semana era faltante se usaba el precio de la semana siguiente y si el precio de la última semana era faltante se usaba el precio de la semana anterior (estos dos últimos casos son para inicio y final del período en estudio respectivamente).
+
+##### Random Forest + modelos ARIMA para la determinación del precio diario
+
+En esta opción se trabaja de forma similar, se vuelve a utilizar Random Forest para la predicción de la demanda total, y modelos de series de tiempo para la determinación del precio en el conjunto de datos a predecir.
+
+La diferencia entre esta opción y la otra es la forma de como se modelan las series temporales, en este caso, se utilizaron 10950 modelos SARIMA que resultan de las combinaciones de las 150 tiendas y 73 subgrupos a predecir, las restantes 150 combinaciones son para las tiendas que venden subgrupos de productos de “Basketball” pero éstas son imputadas al precio que se venden los productos del “Baseball”, para modelar patrones diarios e intentar captar la mayor cantidad de información posible para el pronóstico del precio.
+
+Nuevamente, para la determinación del precio en cada subgrupo de productos y en cada tienda, se utilizó el precio mediano de cada producto vendido en ese subgrupo de productos, en cada tienda y día del año. Dado que había tiendas que no vendían todos los subgrupos de productos todas los días, se usó un precio interpolado entre el/los día/as previo/os y el/los día/as siguiente/es dando a entender que el precio se comportó de forma estable, luego, si el precio al primer día del año era faltante se usaba el precio de el/los día/as siguiente/es y si el precio al último día del año era faltante se usaba el precio de él/las semana/as anterior/es (estos dos últimos casos son para inicio y final del período en estudio respectivamente).
 
 #### Resultados - Objetivo 1
 
+......
+
 ### Objetivo 2 - Optimización de precios
 
-Como se mencionó previamente, la Casa de Asterión necesita mejorar su estrategia de precios, ya que se ha observado una disminución en las ganancias y desea entender cómo ajustar sus precios para optimizar la demanda y el margen de ganancias de sus productos. 
+Como se mencionó previamente, la Casa de Asterión necesita mejorar su estrategia de precios, ya que se ha observado una disminución en las ganancias y desea entender cómo ajustar sus precios para optimizar la demanda y el margen de ganancias de sus productos.
 
 Luego de crear un modelo predictivo de la cantidad de ventas, se deberán identificar los precios óptimos para cada producto que maximicen la ganancia. Esto implica encontrar el equilibrio adecuado entre el precio y la demanda para asegurar que la empresa obtenga el mayor rendimiento posible.
 
+...... 
 
 #### Preprocesamiento de los datos - Objetivo 2
 
-calculo de la ganancia y bla bla bla
+A partir de la base creada luego de combinar las bases `eci_transactions`, `eci_stores` y `eci_product_master`, en donde se muestran todas las transacciones con sus diferentes características, se procede a calcular las ganancias para cada transacción, las cuales serán de vital importancia para responder al objetivo en cuestión. El calculo se realiza de la siguiente manera:
+
+`GANANCIAS` = `TOTAL_SALES` - `QUANTITY` x `costos`
+
+A continuación, se realizará un análisis descriptivo con la base armada para este objetivo.
 
 #### Análisis descriptivo - Objetivo 2
 
@@ -794,14 +819,15 @@ plot_ly(
   ) 
 ```
 
-
-
 #### Técnicas estadísticas - Objetivo 2
+
+......
 
 #### Resultados - Objetivo 2
 
+......
+
 ## Resultados generales y conclusiones
 
-
-
+......
 
