@@ -761,9 +761,9 @@ Por lo tanto, el modelo usado para la predicción de la demanda total en la prim
 
 Como se mencionó previamente, la Casa de Asterión necesita mejorar su estrategia de precios, ya que se ha observado una disminución en las ganancias y desea entender cómo ajustar sus precios para optimizar la demanda y el margen de ganancias de sus productos.
 
-Luego de crear un modelo predictivo de la cantidad de ventas, se deberán identificar los precios óptimos para cada producto que maximicen la ganancia. Esto implica encontrar el equilibrio adecuado entre el precio y la demanda para asegurar que la empresa obtenga el mayor rendimiento posible.
+Para abordar este objetivo, se emplearán técnicas de Machine Learning con la finalidad de estimar la cantidad vendida de cada producto, a partir de un conjunto de variables explicativas que permitan obtener la mayor precisión posible en la predicción.
 
-...... 
+Luego de crear un modelo predictivo de la cantidad de ventas, se deberán identificar los precios óptimos para cada producto que maximicen la ganancia. Esto implica encontrar el equilibrio adecuado entre el precio y la demanda para asegurar que la empresa obtenga el mayor rendimiento posible.
 
 #### Preprocesamiento de los datos - Objetivo 2
 
@@ -784,9 +784,9 @@ A continuación, se realizará un análisis descriptivo con la base armada para 
 
 # Copiar tabla de tiendas y productos a Spark
 
-eci_product_master <- rename(eci_product_master, SKU = sku, SUBGROUP = subgroup)
-eci_stores_tbl   <- copy_to(sc, eci_stores,        name = "eci_stores",        overwrite = TRUE)
-eci_products_tbl <- copy_to(sc, eci_product_master, name = "eci_product_master", overwrite = TRUE)
+#eci_product_master <- rename(eci_product_master, SKU = sku, SUBGROUP = subgroup)
+#eci_stores_tbl   <- copy_to(sc, eci_stores,        name = "eci_stores",        overwrite = TRUE)
+#eci_products_tbl <- copy_to(sc, eci_product_master, name = "eci_product_master", overwrite = #TRUE)
 
 #Agrego los costos y precios base
 
@@ -804,17 +804,17 @@ eci_products_tbl <- copy_to(sc, eci_product_master, name = "eci_product_master",
 
 #print(colnames(datos_tbl_2))#Voy viendo que todas las variables esten
 
-spark_write_parquet(
-  datos_tbl_2,
-  path = "Datos/datos_ganancias_1.parquet",
-  mode = "overwrite"  # o "append" si querés agregar
-)
+#spark_write_parquet(
+#  datos_tbl_2,
+#  path = "Datos/datos_ganancias_1.parquet",
+#  mode = "overwrite"  # o "append" si querés agregar
+#)
 
 ds_ganancias <- open_dataset("./Datos/datos_ganancias_1.parquet")
 print(colnames(ds_ganancias))
 #Para la base completa
 
-a = ds_ganancias %>% head(5) %>% collect()
+#a = ds_ganancias %>% head(5) %>% collect()
 
 SKU_ganancia <- ds_ganancias %>%
   group_by(product_name,category) %>%
@@ -903,10 +903,65 @@ plot_ly(
   )   
 ```
 
+Ganancias por region
+
+```{r}
+ganancias_estado <- ds_ganancias %>%
+group_by(STATE) %>%
+summarise(ganancias = sum(GANANCIAS),
+cant_stores = n_distinct(STORE_ID),
+.groups = "drop"
+)
+
+# unir las ventas con el mapa de estados
+plot_data <- ganancias_estado %>%
+mutate(state = STATE,
+ganancias_tiendas = ganancias/cant_stores) %>%
+collect()
+
+options(scipen = 999)
+
+plot_usmap(data = plot_data, values = "ganancias", regions = "states") +
+scale_fill_continuous(
+low = "white", high = "steelblue", name = "Ganancia total por estado"
+) +
+theme(legend.position = "right")
+
+```
+ganancia promedio por tienda, por región
+
+```{r}
+options(scipen = 999)
+
+plot_usmap(data = plot_data, values = "ganancias_tiendas", regions = "states") +
+scale_fill_continuous(
+low = "white", high = "steelblue", name = "Ganancia promedio por estado"
+) +
+theme(legend.position = "right")
+```
+
+ganancias en relación a la diferencia con el precio recomendado por el vendedor
+
+```{r}
+plot_data_1 <- ds_ganancias %>%
+  mutate(
+    pct_increase = (PRICE - initial_ticket_price)/initial_ticket_price,
+    bin = ntile(pct_increase, 5)  # divide en 5 percentiles
+  ) %>%
+  group_by(bin) %>%
+  summarise(
+    total_ganancia = sum(GANANCIAS),
+    avg_price      = mean(PRICE),
+    avg_qty        = mean(QUANTITY)
+  ) %>% 
+  collect()
+
+```
 
 #### Técnicas estadísticas - Objetivo 2
 
-......
+Para optimizar el precio con el objetivo de maximizar la ganancia, se buscó modelar la cantidad vendida en función de distintas variables explicativas: PRICE, STORE_ID, SKU, category, group, BRAND y REGION. Inicialmente se evaluaron diferentes enfoques, como Regresión Poisson, Random Forest y Gradient Boosting. Sin embargo, debido a la sobredispersión observada en los datos, se optó por utilizar modelos más flexibles, capaces de capturar relaciones no lineales, destacándose en este sentido los modelos de Gradient Boosting. Una vez entrenado el modelo, se construyó una grilla de precios que abarca desde el valor mínimo hasta el máximo observado, con una longitud de 25 puntos. Para cada precio de la grilla se estimó la cantidad vendida utilizando el modelo ajustado. A partir de estas predicciones se calculó la variable:
+GANANCIAS = (`PRICE - costos)x`QUANTITY`, y finalmente se seleccionó el precio que maximiza dicha ganancia.
 
 #### Resultados - Objetivo 2
 
