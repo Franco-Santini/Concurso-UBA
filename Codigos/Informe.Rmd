@@ -759,7 +759,7 @@ Por lo tanto, el modelo usado para la predicción de la demanda total en la prim
 
 ### Objetivo 2 - Optimización de precios
 
-Como se mencionó previamente, la Casa de Asterión necesita mejorar su estrategia de precios, ya que se ha observado una disminución en las ganancias y desea entender cómo ajustar sus precios para optimizar la demanda y el margen de ganancias de sus productos.
+Como se mencionó previamente, *La Casa de Asterión* necesita mejorar su estrategia de precios, ya que se ha observado una disminución en las ganancias y desea entender cómo ajustar sus precios para optimizar la demanda y el margen de ganancias de sus productos.
 
 Para abordar este objetivo, se emplearán técnicas de Machine Learning con la finalidad de estimar la cantidad vendida de cada producto, a partir de un conjunto de variables explicativas que permitan obtener la mayor precisión posible en la predicción.
 
@@ -841,6 +841,10 @@ plot_ly(
 
 ```
 
+Como se puede apreciar, los dos productos que mayor ganancias totales generaron son *CircuitCity Home Audio Edge X* y *Fashionista Infants Collection*, de las categorías *Electronics* y *Clothing* respectivamente. También se puede destacar de este gráfico, que 19 de los 20 productos que mayores ganancias totales generaron fueron de la categoría *Electronics*, la cual por lo visto anteriormente, es la de mayor demanda.
+
+
+
 ```{r}
 SKU_ganancia_prom <- ds_ganancias %>%
   group_by(product_name, category) %>%
@@ -867,6 +871,9 @@ plot_ly(
     yaxis = list(title = "Ganancias promedio")
   ) 
 ```
+
+A partir de este gráfico, se puede observar que el producto *TechPro Home Audio Ultra 2024* de la categoría *Electronics* es el que mayor ganancia promedio por unidad generó, y siendo esta categoría la que mejores resultados otorga nuevamente.
+
 
 ```{r}
 top_5 <- ds_ganancias %>%
@@ -899,9 +906,10 @@ plot_ly(
     title = "Evolución mensual de ganancias por producto",
     xaxis = list(title = "Mes", tickformat = "%Y-%m"), 
     yaxis = list(title = "Ganancia total"),
-    legend = list(title = list(text = "Producto"))
-  )   
+    legend = list(title = list(text = "Producto"), font = list(size = 8.5)))   
 ```
+
+Al ver la evolución de las ganancias mensuales de los 5 productos que mayores ganacias totales generaron durante todo el período estidiado, se puede observar un pico de rendimientos en la mayoría de los productos durante mediados de 2022 y también un leve decrecimiento en las ganancias a lo largo de estos años, lo cual es el principal mótivo por el cual *La Casa de Asterión* busca mejorar su estrategia de precios para así aumentar el rendimiento.
 
 Ganancias por region
 
