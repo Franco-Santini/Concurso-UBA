@@ -36,6 +36,8 @@ eci_product_groups <- read_csv("Datos/eci_product_groups.csv")
 eci_product_master <- read_csv("Datos/eci_product_master.csv")
 
 eci_stores_clusters <- read_csv("Datos/eci_stores_clusters.csv")
+
+load("../datos_tabla.RData", verbose = TRUE)
 ```
 
 ```{r}
@@ -716,9 +718,44 @@ La diferencia entre esta opción y la otra es la forma de como se modelan las se
 
 Nuevamente, para la determinación del precio en cada subgrupo de productos y en cada tienda, se utilizó el precio mediano de cada producto vendido en ese subgrupo de productos, en cada tienda y día del año. Dado que había tiendas que no vendían todos los subgrupos de productos todas los días, se usó un precio interpolado entre el/los día/as previo/os y el/los día/as siguiente/es dando a entender que el precio se comportó de forma estable, luego, si el precio al primer día del año era faltante se usaba el precio de el/los día/as siguiente/es y si el precio al último día del año era faltante se usaba el precio de él/las semana/as anterior/es (estos dos últimos casos son para inicio y final del período en estudio respectivamente).
 
-#### Resultados - Objetivo 1
+##### Modelos de “Gradient Boosting” + ARIMA para la determinación del precio semanal
 
-......
+En esta opción se plantea usar modelos de Gradient Boosting para la predicción de la demanda total, que al igual que Random Forest, se utiliza para captar relaciones no lineales en los datos, cabe aclarar que no se realizó una optimización de hiperparámetros, pero se usaron hiperparámetros a conciencia. Los modelos ARIMA utilizados para la determinación del precio semanal fueron los mismos que se utilizaron en la primera opción.
+
+#### Resultados - Objetivo 1
+En esta sección se presentan los resultados de la optimización de hiperparámetros de Random Forest haciendo uso del $R^2$ para elegir la mejor combinación y, además, la inclusión de la métrica de la tabla pública del concurso (Score), como métrica de comparación entre las opciones postuladas.
+En la optimización de hiperparámetros de Random Forest se obtiene la siguiente tabla:
+
+```{r}
+
+opt_res$scoreSummary |>
+  select(num_trees, min_instances, Score, Score_sd) |>
+  arrange(-Score) |>
+  kable(
+    digits = 4,
+    col.names = c("Árboles", "Ínstancias mínimas", "$R^2$ promedio", "$R^2$ desvío"),
+    format = "html",
+    booktabs = TRUE,
+    align = "c"  # centra todas las columnas
+  ) |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = FALSE,
+    position = "center",
+    font_size = 14
+  ) |>
+  row_spec(0, bold = TRUE, color = "white", background = "steelblue") |>  # encabezado
+  column_spec(1, width = "6em") |>   # ajusta ancho columna Árboles
+  column_spec(2, width = "10em") |>  # ajusta ancho columna Ínstancias mínimas
+  column_spec(3:4, width = "10em")
+```
+
+Se puede observar que la combinación de hiperparámetros que tiene mayor $R^2$ promedio resulta de usar 165 árboles y 9 instancias mínimas.
+El Score de las predicciones usando las 3 estrategias antes presentadas fueron:
+•	Random Forest + modelos ARIMA para la determinación del precio semanal: 0.12876
+•	Random Forest + modelos ARIMA para la determinación del precio diario: 0.10491
+•	Gradient Boosting + modelos ARIMA para la determinación del precio semanal: 0.13456
+Por lo tanto, el modelo usado para la predicción de la demanda total en la primer semana de enero del 2024 fue “Gradient Boosting + modelos ARIMA para la determinación del precio semanal”.
 
 ### Objetivo 2 - Optimización de precios
 
@@ -739,13 +776,11 @@ A continuación, se realizará un análisis descriptivo con la base armada para 
 #### Análisis descriptivo - Objetivo 2
 
 ```{r}
-df <- fread("Datos/eci_transactions.csv")  
+#df <- fread("Datos/eci_transactions.csv")  
 
-write_parquet(df, "eci_transactions.parquet")
+#write_parquet(df, "eci_transactions.parquet")
 
-eci_transactions <- spark_read_parquet(sc, name = "eci_transacciones", path = "./eci_transactions.parquet")
-
-#Para la base completa
+#eci_transactions <- spark_read_parquet(sc, name = "eci_transacciones", path = #"Datos/eci_transactions.parquet")
 
 # Copiar tabla de tiendas y productos a Spark
 
@@ -755,30 +790,44 @@ eci_products_tbl <- copy_to(sc, eci_product_master, name = "eci_product_master",
 
 #Agrego los costos y precios base
 
-datos_tbl_2 <- eci_transactions %>%
- left_join(eci_products_tbl, by = c("SKU", "SUBGROUP")) %>%
- left_join(eci_stores_tbl, by = "STORE_ID") %>%
-  select(-BRAND) %>%
-  mutate(
-   DATE = to_date(DATE),  # convertir a fecha
-   DAY_OF_WEEK = date_format(DATE, "E"),
-   STORE_TYPE = if_else(is.na(STORE_TYPE), "Unknown", STORE_TYPE)) # "Mon", "Tue", ... si querés número: DAY_OF_WEEK = date_format(DATE_ID, "u") # 1=lunes ... 7=domingo
+#datos_tbl_2 <- eci_transactions %>%
+# mutate(QUANTITY = round(TOTAL_SALES/PRICE)) %>%
+# left_join(eci_products_tbl, by = c("SKU", "SUBGROUP")) %>%
+# left_join(eci_stores_tbl, by = "STORE_ID") %>%
+#  select(-BRAND) %>%
+#  mutate(
+#   DATE = to_date(DATE),  # convertir a fecha
+#   DAY_OF_WEEK = date_format(DATE, "E"),
+#   STORE_TYPE = if_else(is.na(STORE_TYPE),"Unknown", STORE_TYPE),
+#   GANANCIAS = TOTAL_SALES - QUANTITY*costos
+#   ) 
 
-print(colnames(datos_tbl_2))#Voy viendo que todas las variables esten
+#print(colnames(datos_tbl_2))#Voy viendo que todas las variables esten
 
+spark_write_parquet(
+  datos_tbl_2,
+  path = "Datos/datos_ganancias_1.parquet",
+  mode = "overwrite"  # o "append" si querés agregar
+)
 
-SKU_ganancia <- datos_tbl_2 %>%
-  mutate(GANANCIAS = TOTAL_SALES - QUANTITY*costos) %>%
-  group_by(product_name) %>%
-  summarise(GANANCIAS_ = sum(GANANCIAS)) %>% 
+ds_ganancias <- open_dataset("./Datos/datos_ganancias_1.parquet")
+print(colnames(ds_ganancias))
+#Para la base completa
+
+a = ds_ganancias %>% head(5) %>% collect()
+
+SKU_ganancia <- ds_ganancias %>%
+  group_by(product_name,category) %>%
+  summarise(ganancia    = sum(GANANCIAS),
+            .groups = "drop") %>% 
   collect() %>%
-  slice_max(order_by = GANANCIAS_, n = 20) 
+  slice_max(order_by = ganancia, n = 20) 
   
 
 plot_ly(
   SKU_ganancia,
-  y = ~GANANCIAS_,
-  x = ~reorder(product_name, -GANANCIAS_),
+  y = ~ganancia,
+  x = ~reorder(product_name, -ganancia),
   type = "bar",
   name = "Ganancias",
   marker = list(color = "steelblue")
@@ -793,11 +842,11 @@ plot_ly(
 ```
 
 ```{r}
-SKU_ganancia_prom <- datos_tbl_2 %>%
-  mutate(GANANCIAS = TOTAL_SALES - QUANTITY*costos) %>%
-  group_by(product_name) %>%
+SKU_ganancia_prom <- ds_ganancias %>%
+  group_by(product_name, category) %>%
   summarise(GANANCIAS_ = sum(GANANCIAS),
-            cantidad_prod = sum(QUANTITY)) %>% 
+            cantidad_prod = sum(QUANTITY),
+            .groups = "drop") %>% 
   mutate(prom_ganancias = GANANCIAS_ / cantidad_prod) %>% 
   collect() %>%
   slice_max(order_by = prom_ganancias, n = 20) 
@@ -808,7 +857,7 @@ plot_ly(
   y = ~prom_ganancias,
   x = ~reorder(product_name, -prom_ganancias),
   type = "bar",
-  name = "Ganancias promedio",
+  name = "Ganancias promedio por unidad",
   marker = list(color = "steelblue")
 ) %>%
   layout(
@@ -820,25 +869,21 @@ plot_ly(
 ```
 
 ```{r}
-top_20 <- datos_tbl_2 %>% 
-  mutate(GANANCIAS = TOTAL_SALES - QUANTITY*costos) %>%
+top_5 <- ds_ganancias %>%
   group_by(product_name) %>%
   summarise(GANANCIAS_ = sum(GANANCIAS)) %>%
   arrange(desc(GANANCIAS_)) %>%
   head(5)
 
-mensual_ganancia = datos_tbl_2 %>% 
-  mutate(GANANCIAS = TOTAL_SALES - QUANTITY*costos) %>%
+mensual_ganancia = ds_ganancias  %>%
   mutate(DATE = as_date(DATE),
          mes = month(DATE),
-         año = year(DATE)) %>% 
-  mutate(año_mes = to_date(concat_ws("-", año, lpad(mes, 2, "0"), "01"))) %>% 
+         año = year(DATE),
+         año_mes = make_date(año, mes, 1)) %>% 
   group_by(product_name, año_mes) %>%
   summarise(GANANCIAS_ = sum(GANANCIAS)) %>%
-  semi_join(top_20, by = "product_name") %>% 
+  semi_join(top_5, by = "product_name") %>% 
   collect()
-
-mensual_ganancia$año_mes <- as.Date(mensual_ganancia$año_mes)
 
 mensual_ganancia <- mensual_ganancia[order(mensual_ganancia$año_mes), ]
 
