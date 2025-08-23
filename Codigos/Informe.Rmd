@@ -628,7 +628,7 @@ subplot(p1, p2, nrows = 2, shareY = TRUE, titleY = TRUE) %>%
 
 ```
 
-Se puede apreciar con claridad que las tiendas de tipo *Street* y *Mall* son las que mayores demanda presentan, con la particularidad que existen las mismas cantidades de tiendas de estos tipos (44 cada uno), y sin embargo las de tipo *Street* tuvieron una demanda de \$48.194.937 mayor.
+Se puede apreciar con claridad que las tiendas de tipo *Street* y *Mall* son las que mayores demanda presentan, con la particularidad que existen las mismas cantidades de tiendas de estos tipos (44 cada uno), y sin embargo las de tipo *Street* tuvieron una demanda de $48.194.937 mayor.
 
 Al analizar los gráficos, se observa de manera lógica que una mayor cantidad de tiendas se asocia con un incremento en la demanda.
 
@@ -723,7 +723,9 @@ Nuevamente, para la determinación del precio en cada subgrupo de productos y en
 En esta opción se plantea usar modelos de Gradient Boosting para la predicción de la demanda total, que al igual que Random Forest, se utiliza para captar relaciones no lineales en los datos, cabe aclarar que no se realizó una optimización de hiperparámetros, pero se usaron hiperparámetros a conciencia. Los modelos ARIMA utilizados para la determinación del precio semanal fueron los mismos que se utilizaron en la primera opción.
 
 #### Resultados - Objetivo 1
+
 En esta sección se presentan los resultados de la optimización de hiperparámetros de Random Forest haciendo uso del $R^2$ para elegir la mejor combinación y, además, la inclusión de la métrica de la tabla pública del concurso (Score), como métrica de comparación entre las opciones postuladas.
+
 En la optimización de hiperparámetros de Random Forest se obtiene la siguiente tabla:
 
 ```{r}
@@ -969,6 +971,7 @@ plot_data_1 <- ds_ganancias %>%
 #### Técnicas estadísticas - Objetivo 2
 
 Para optimizar el precio con el objetivo de maximizar la ganancia, se buscó modelar la cantidad vendida en función de distintas variables explicativas: PRICE, STORE_ID, SKU, category, group, BRAND y REGION. Inicialmente se evaluaron diferentes enfoques, como Regresión Poisson, Random Forest y Gradient Boosting. Sin embargo, debido a la sobredispersión observada en los datos, se optó por utilizar modelos más flexibles, capaces de capturar relaciones no lineales, destacándose en este sentido los modelos de Gradient Boosting. Una vez entrenado el modelo, se construyó una grilla de precios que abarca desde el valor mínimo hasta el máximo observado, con una longitud de 25 puntos. Para cada precio de la grilla se estimó la cantidad vendida utilizando el modelo ajustado. A partir de estas predicciones se calculó la variable:
+
 GANANCIAS = (`PRICE - costos)x`QUANTITY`, y finalmente se seleccionó el precio que maximiza dicha ganancia.
 
 #### Resultados - Objetivo 2
