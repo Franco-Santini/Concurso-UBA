@@ -1,22 +1,23 @@
 ---
-title: "Informe concurso AsterionHouse"
+title: "La Casa de Asterión: estimación de demanda y optimización de precios de artículos de venta minorista"
 author: "Gazze Simón, Moresi Manuel, Santini Franco"
-date: "2025-08-12"
-output: 
-  html_document:
-    theme: flatly
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown:
+    self_contained: false
+    toc_depth: 3
+    number_sections: true
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, results='hide'}
 knitr::opts_chunk$set(echo = FALSE, 
                       warning = FALSE,
                       message = FALSE, 
                       fig.align = "center")
 ```
 
-# La Casa de Asterión: estimación de demanda y optimización de precios de artículos de venta minorista
 
-```{r}
+```{r, results='hide'}
 library(dplyr)
 library(knitr)
 library(kableExtra)
@@ -120,13 +121,13 @@ transactions_df <- read.csv("Datos/eci_transactions.csv", nrows = 6)
 
 ds_final <- open_dataset("./Datos/datos_final_1.parquet")
 
-print(colnames(ds_final))#Voy viendo que todas las variables esten
+#print(colnames(ds_final))#Voy viendo que todas las variables esten
 
 ds_final = ds_final %>%
   mutate(STORE_TYPE = if_else(is.na(STORE_TYPE), "Unknown", STORE_TYPE))
 ```
 
-## Introducción
+# Introducción
 
 La empresa *La Casa de Asterión* es una cadena de negocios minoristas de artículos para el hogar, la cual cuenta con 15 tiendas en distintas regiones de Estados Unidos. Recientemente dicha empresa ha detectado una reducción en las ganancias y buscan evaluar y mejorar su estrategia de precios para aumentar el rendimiento.
 
@@ -138,7 +139,7 @@ Se trabajará con información proveniente de las transacciones realizadas en 9 
 
 **Aclaración**: cuando se habla de transacción no refiere al evento completo de la compra, sino a la cantidad de productos iguales dentro de una compra.
 
-## Objetivos
+# Objetivos
 
 A lo largo de este trabajo tendremos en cuenta 2 objetivos principales:
 
@@ -150,9 +151,9 @@ En base a la información prevista de las transacciones, se busca generar un mod
 
 Como ya se mencionó anteriormente, la cadena *Casa de Asterión* presentó una disminución de las ganancias en el último tiempo. Por lo que se busca identificar, para cada producto, el precio óptimo que maximice la ganancia, equilibrando el ingreso por unidad vendida con el volumen total de ventas y de esta manera poder revertir la situación.
 
-## Metodología
+# Metodología
 
-### Datos
+## Datos
 
 Fueron proporcionadas 6 bases de datos con distinta información relevante para la realización de este trabajo:
 
@@ -322,7 +323,7 @@ Contiene información de 801923 clientes, identificando datos personales de los 
 
 </details>
 
-### Manejo de los datos
+## Manejo de los datos
 
 Antes de iniciar el análisis, fue necesario realizar una inspección exhaustiva de los datos. Este proceso permitió identificar aspectos relevantes vinculados al preprocesamiento, tales como la detección de valores atípicos, la presencia de datos faltantes y otras cuestiones que requerían tratamiento previo. Dichas cuestiones se enuncian a continuación:
 
@@ -369,13 +370,13 @@ eci_product_master |>
 
 Se observan similitudes tanto en los precios iniciales promedio, como en los costos promedios para los productos de Basketball y Baseball.
 
-## Desarrollo
+# Desarrollo
 
-### Objetivo 1 - Estimación de demanda
+## Objetivo 1 - Estimación de demanda
 
 Para el desarrollo del Objetivo 1, se aplicarán técnicas de Machine Learning con el propósito de entrenar los datos y estimar la demanda de los distintos subproductos. Asimismo, se llevará a cabo un procedimiento de estimación de precios correspondiente a la semana de referencia para la generación de pronósticos. Estos valores estimados se incorporarán como variables explicativas en el modelo, con el objetivo de predecir de manera adecuada la demanda en la semana posterior al fin de los datos.
 
-#### Preprocesamiento de los datos - Objetivo 1
+### Preprocesamiento de los datos - Objetivo 1
 
 Para la preparación de los datos, se realizaron diversos procesos de depuración y combinación de las bases disponibles, con el fin de obtener un conjunto único que permitiera entrenar el modelo de predicción de la demanda.
 
@@ -389,7 +390,7 @@ Finalmente, las transacciones se agruparon por día, por subproducto y por tiend
 
 En síntesis, el proceso de preparación de datos permitió pasar de múltiples bases dispersas a un único conjunto de datos estructurado, listo para ser utilizado en el entrenamiento de los modelos predictivos y para el análisis descriptivo que sigue a continuación.
 
-#### Análisis descriptivo - Objetivo 1
+### Análisis descriptivo - Objetivo 1
 
 Al querer estimar la demanda (`TOTAL_SALES`) de manera adecuada, se plantea el análisis descriptivo buscando evidenciar que variables entre las que se encuentran disponibles en nuestras bases pueden influir en el comportamiento de la variable respuesta mencionada.
 
@@ -692,7 +693,7 @@ subplot(p3, p4, nrows = 2, shareY = TRUE, titleY = TRUE) %>%
 
 Se evidencia que la marca *Essentials Plus* es la que mayor demanda presenta, siendo también la marca con mayor cantidad de tiendas.
 
-#### Técnicas estadísticas - Objetivo 1
+### Técnicas estadísticas - Objetivo 1
 
 Antes de comenzar con el ajuste de modelos, se tiene en cuenta que la variable a predecir es cuantitativa, por lo que se opta por utilizar modelos de regresión. En primera instancia se consideraron varias alternativas, como regresión lineal, Random Forest, modelos de series de tiempo, entre otros. Sin embargo, dado el enfoque de predicción de cada uno de ellos, se decide trabajar con Random Forest para captar relaciones no lineales y predecir la demanda total de manera más eficiente, las variables explicativas consideradas fueron: `PRICE`, `SUBGROUP`, `STORE_TYPE`, `REGION`, `STORE_ID`, `mes`, `dia`, `año`, `category`, `group` y `BRAND`.
 
@@ -700,7 +701,7 @@ Dado que Random Forest posee múltiples hiperparámetros, se lleva a cabo un pro
 
 ![](optimizacióndehiperparámetros.png)
 
-##### Random Forest + modelos ARIMA para la determinación del precio semanal
+#### Random Forest + modelos ARIMA para la determinación del precio semanal
 
 En esta opción se plantea usar Random Forest para la predicción de la demanda total, y modelos de series de tiempo para la determinación del precio en el conjunto de datos a predecir. La justificación del uso de modelos de series temporales es porque éstos captan los patrones estacionales de los datos y usar esa información es una buena estrategia para determinar el precio.
 
@@ -710,7 +711,7 @@ Para la determinación del precio en cada subgrupo de productos y en cada tienda
 
 Dado que había tiendas que no vendían todos los subgrupos de productos todas las semanas, en esas se uso un precio interpolado entre la semana previa y la semana siguiente dando a entender que el precio se comportó de forma estable, luego, si el precio al inicio de la semana era faltante se usaba el precio de la semana siguiente y si el precio de la última semana era faltante se usaba el precio de la semana anterior (estos dos últimos casos son para inicio y final del período en estudio respectivamente).
 
-##### Random Forest + modelos ARIMA para la determinación del precio diario
+#### Random Forest + modelos ARIMA para la determinación del precio diario
 
 En esta opción se trabaja de forma similar, se vuelve a utilizar Random Forest para la predicción de la demanda total, y modelos de series de tiempo para la determinación del precio en el conjunto de datos a predecir.
 
@@ -718,11 +719,11 @@ La diferencia entre esta opción y la otra es la forma de como se modelan las se
 
 Nuevamente, para la determinación del precio en cada subgrupo de productos y en cada tienda, se utilizó el precio mediano de cada producto vendido en ese subgrupo de productos, en cada tienda y día del año. Dado que había tiendas que no vendían todos los subgrupos de productos todas los días, se usó un precio interpolado entre el/los día/as previo/os y el/los día/as siguiente/es dando a entender que el precio se comportó de forma estable, luego, si el precio al primer día del año era faltante se usaba el precio de el/los día/as siguiente/es y si el precio al último día del año era faltante se usaba el precio de él/las semana/as anterior/es (estos dos últimos casos son para inicio y final del período en estudio respectivamente).
 
-##### Modelos de “Gradient Boosting” + ARIMA para la determinación del precio semanal
+#### Modelos de “Gradient Boosting” + ARIMA para la determinación del precio semanal
 
 En esta opción se plantea usar modelos de Gradient Boosting para la predicción de la demanda total, que al igual que Random Forest, se utiliza para captar relaciones no lineales en los datos, cabe aclarar que no se realizó una optimización de hiperparámetros, pero se usaron hiperparámetros a conciencia. Los modelos ARIMA utilizados para la determinación del precio semanal fueron los mismos que se utilizaron en la primera opción.
 
-#### Resultados - Objetivo 1
+### Resultados - Objetivo 1
 
 En esta sección se presentan los resultados de la optimización de hiperparámetros de Random Forest haciendo uso del $R^2$ para elegir la mejor combinación y, además, la inclusión de la métrica de la tabla pública del concurso (Score), como métrica de comparación entre las opciones postuladas.
 
@@ -759,7 +760,7 @@ El Score de las predicciones usando las 3 estrategias antes presentadas fueron:
 •	Gradient Boosting + modelos ARIMA para la determinación del precio semanal: 0.13456
 Por lo tanto, el modelo usado para la predicción de la demanda total en la primer semana de enero del 2024 fue “Gradient Boosting + modelos ARIMA para la determinación del precio semanal”.
 
-### Objetivo 2 - Optimización de precios
+## Objetivo 2 - Optimización de precios
 
 Como se mencionó previamente, *La Casa de Asterión* necesita mejorar su estrategia de precios, ya que se ha observado una disminución en las ganancias y desea entender cómo ajustar sus precios para optimizar la demanda y el margen de ganancias de sus productos.
 
@@ -767,7 +768,7 @@ Para abordar este objetivo, se emplearán técnicas de Machine Learning con la f
 
 Luego de crear un modelo predictivo de la cantidad de ventas, se deberán identificar los precios óptimos para cada producto que maximicen la ganancia. Esto implica encontrar el equilibrio adecuado entre el precio y la demanda para asegurar que la empresa obtenga el mayor rendimiento posible.
 
-#### Preprocesamiento de los datos - Objetivo 2
+### Preprocesamiento de los datos - Objetivo 2
 
 A partir de la base creada luego de combinar las bases `eci_transactions`, `eci_stores` y `eci_product_master`, en donde se muestran todas las transacciones con sus diferentes características, se procede a calcular las ganancias para cada transacción, las cuales serán de vital importancia para responder al objetivo en cuestión. El calculo se realiza de la siguiente manera:
 
@@ -775,7 +776,7 @@ A partir de la base creada luego de combinar las bases `eci_transactions`, `eci_
 
 A continuación, se realizará un análisis descriptivo con la base armada para este objetivo.
 
-#### Análisis descriptivo - Objetivo 2
+### Análisis descriptivo - Objetivo 2
 
 ```{r}
 #df <- fread("Datos/eci_transactions.csv")  
@@ -813,7 +814,9 @@ A continuación, se realizará un análisis descriptivo con la base armada para 
 #)
 
 ds_ganancias <- open_dataset("./Datos/datos_ganancias_1.parquet")
-print(colnames(ds_ganancias))
+
+#print(colnames(ds_ganancias))
+
 #Para la base completa
 
 #a = ds_ganancias %>% head(5) %>% collect()
@@ -938,6 +941,8 @@ low = "white", high = "steelblue", name = "Ganancia total por estado"
 theme(legend.position = "right")
 
 ```
+
+
 ganancia promedio por tienda, por región
 
 ```{r}
@@ -953,32 +958,32 @@ theme(legend.position = "right")
 ganancias en relación a la diferencia con el precio recomendado por el vendedor
 
 ```{r}
-plot_data_1 <- ds_ganancias %>%
-  mutate(
-    pct_increase = (PRICE - initial_ticket_price)/initial_ticket_price,
-    bin = ntile(pct_increase, 5)  # divide en 5 percentiles
-  ) %>%
-  group_by(bin) %>%
-  summarise(
-    total_ganancia = sum(GANANCIAS),
-    avg_price      = mean(PRICE),
-    avg_qty        = mean(QUANTITY)
-  ) %>% 
-  collect()
+# plot_data_1 <- ds_ganancias %>%
+#   mutate(
+#     pct_increase = (PRICE - initial_ticket_price)/initial_ticket_price,
+#     bin = ntile(pct_increase, 5)  # divide en 5 percentiles
+#   ) %>%
+#   group_by(bin) %>%
+#   summarise(
+#     total_ganancia = sum(GANANCIAS),
+#     avg_price      = mean(PRICE),
+#     avg_qty        = mean(QUANTITY)
+#   ) %>% 
+#   collect()
 
 ```
 
-#### Técnicas estadísticas - Objetivo 2
+### Técnicas estadísticas - Objetivo 2
 
 Para optimizar el precio con el objetivo de maximizar la ganancia, se buscó modelar la cantidad vendida en función de distintas variables explicativas: PRICE, STORE_ID, SKU, category, group, BRAND y REGION. Inicialmente se evaluaron diferentes enfoques, como Regresión Poisson, Random Forest y Gradient Boosting. Sin embargo, debido a la sobredispersión observada en los datos, se optó por utilizar modelos más flexibles, capaces de capturar relaciones no lineales, destacándose en este sentido los modelos de Gradient Boosting. Una vez entrenado el modelo, se construyó una grilla de precios que abarca desde el valor mínimo hasta el máximo observado, con una longitud de 25 puntos. Para cada precio de la grilla se estimó la cantidad vendida utilizando el modelo ajustado. A partir de estas predicciones se calculó la variable:
 
 GANANCIAS = (`PRICE - costos)x`QUANTITY`, y finalmente se seleccionó el precio que maximiza dicha ganancia.
 
-#### Resultados - Objetivo 2
+### Resultados - Objetivo 2
 
 ......
 
-## Resultados generales y conclusiones
+# Resultados generales y conclusiones
 
 ......
 
