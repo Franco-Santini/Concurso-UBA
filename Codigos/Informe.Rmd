@@ -16,7 +16,6 @@ knitr::opts_chunk$set(echo = FALSE,
                       fig.align = "center")
 ```
 
-
 ```{r, results='hide'}
 library(dplyr)
 library(knitr)
@@ -134,12 +133,14 @@ La empresa *La Casa de Asterión* es una cadena de negocios minoristas de artíc
 Teniendo en cuenta que la fijación de precios es un factor clave para el rendimiento de cualquier negocio. Un precio demasiado alto puede reducir el volumen de ventas, mientras que uno demasiado bajo puede disminuir el margen de ganancia, incluso si la demanda aumenta. Encontrar el punto de equilibrio adecuado requiere no solo un análisis detallado de las ventas y de la elasticidad de la demanda, sino también la consideración de factores externos como la competencia, la estacionalidad y los cambios en las preferencias de los consumidores.
 
 <p align="center">
-  <img src="https://levainvierte.com/wp-content/uploads/2025/03/%C2%BFCuanto-es-lo-maximo-que-se-puede-invertir-en-CETES-Todo-lo-que-necesitas-saber-para-invertir-con-exito.jpg" width="600">
+
+<img src="https://levainvierte.com/wp-content/uploads/2025/03/%C2%BFCuanto-es-lo-maximo-que-se-puede-invertir-en-CETES-Todo-lo-que-necesitas-saber-para-invertir-con-exito.jpg" width="600"/>
+
 </p>
 
 Se busca comprender a fondo la relación entre sus precios, la demanda y otros factores que puedan influir en su rendimiento, con el objetivo de implementar una estrategia de precios más eficiente y orientada a resultados.
 
-Se trabajará con información proveniente de las transacciones realizadas en 9 cadenas de negocios minoristas, entre las que se encuentra nuestro cliente *La casa de Asterion*, en un periodo de 3 años, donde se podrá obtener información de cada uno de los negocios y diferentes características relacionadas al producto que se vende.
+Se trabajará con información proveniente de las transacciones realizadas en 9 cadenas de negocios minoristas en un período de 3 años, donde se podrá obtener información de cada uno de los negocios y diferentes características relacionadas al producto que se vende.
 
 **Aclaración**: cuando se habla de transacción no refiere al evento completo de la compra, sino a la cantidad de productos iguales dentro de una compra.
 
@@ -149,7 +150,7 @@ A lo largo de este trabajo tendremos en cuenta 2 objetivos principales:
 
 1)  *Predecir la demanda diaria de la semana siguiente a la finalización de los datos disponibles*.
 
-En base a la información prevista de las transacciones, se busca generar un modelo predictivo con el cual se pueda estimar de manera adecuada la demanda en pesos (\$) para cada uno de los días en la semana posterior al fin de los datos (desde el 1/1/2024 al 7/1/2024) de los distintos subproductos, en cada una de las tiendas minoristas.
+En base a la información prevista de las transacciones, se busca generar un modelo predictivo con el cual se pueda estimar de manera adecuada la demanda en pesos (\$) para cada uno de los días en la semana posterior al fin de los datos (desde el 1/1/2024 al 7/1/2024) de los distintos subgrupos de productos, en cada una de las tiendas minoristas.
 
 2)  *Proponer soluciones para maximizar la ganancia*.
 
@@ -275,7 +276,7 @@ Contiene información más específica de los productos como el nombre, el preci
 
 -   `eci_product_groups`
 
-Identifica productos que han estado en precio promocional por algún motivo, contiene las siguientes variables:
+En esta base se identifican productos que han estado en precio promocional por algún motivo, contiene las siguientes variables:
 
 <details>
 
@@ -345,7 +346,7 @@ Observando las variables cuantitativas de las bases de datos que se usarán inic
 
 Se realizó una inspección por cada una de las variables de interés y en la base de datos `eci_transaction` se encontraron valores faltantes en la variable `QUANTITY`, la cual como mencionamos anteriormente puede calcularse como `TOTAL_SALES`/`PRICE`, de esta manera se pudo reconstruir el dato e imputar todos los valores faltantes de dicha variable.
 
-En la base de datos `eci_stores`, hay datos faltantes en las variables `ADDRESS2`, `CLOSEDATE` y `STORE_TYPE`. Para las variables `ADDRESS2` y `CLOSEDATE` puede que esto no sea un error en sí, sino que no esten los datos debido a que la tienda no tiene una segunda dirección o porque todavía no cerró respectivamente. Para la variable `STORE_TYPE` encontramos 2 datos faltantes, en los locales QuickBuy - Columbia y MarketExpress Lakewood Uptown, los cuales fueron reemplazados por el valor *Unknown*, ya que no es posible saber de que tipo de tienda se trata.
+En la base de datos `eci_stores`, hay datos faltantes en las variables `ADDRESS2`, `CLOSEDATE` y `STORE_TYPE`. Para las variables `ADDRESS2` y `CLOSEDATE` puede que esto no sea un error en sí, sino que no estén los datos debido a que la tienda no tiene una segunda dirección o porque todavía no cerró respectivamente. Para la variable `STORE_TYPE` encontramos 2 datos faltantes, en los locales QuickBuy - Columbia y MarketExpress Lakewood Uptown, los cuales fueron reemplazados por el valor *Unknown*, ya que no es posible saber de que tipo de tienda se trata.
 
 -   *Datos del subproducto "Basketball"*
 
@@ -501,7 +502,7 @@ plot_ly(
 
 ```
 
-Tal como se evidenciaba anteriormente, los productos relacionados a la electrónica son los que presentan mayor demanda en \$, evidenciandose que los 9 productos que presentaban una mayor demanda que el resto se agrupan en los 3 "grupos": *Audio*, *Computing* y *Mobile*. Siendo además los 3 grupos que conforman la categoría *Electronics*.
+Tal como se mostraba anteriormente, los productos relacionados a la electrónica son los que presentan mayor demanda (en \$), evidenciandose que los 9 productos que presentaban una mayor demanda que el resto se agrupan en los 3 "grupos": *Audio*, *Computing* y *Mobile*. Siendo además los 3 grupos que conforman la categoría *Electronics*.
 
 Otra variable que puede influir en la demanda de cada categoría es la fecha en la que se produjo la transacción, para esto se mostrará la evolución de la demanda a través de los meses en los 3 años que abarca este estudio, y complementariamente mostraremos la demanda por día de la semana.
 
@@ -540,7 +541,7 @@ p <- ventas_mensuales %>%
 p
 ```
 
-Viendo la evolución de la demanda por mes para las distintas categorías, se podría detectar cierta estacionalidad, siendo los primeros meses del año (generalmente desde enero hasta marzo/abril) los que menor demanda tienen, lo cual es de esperarse porque suelen ser meses de menor consumo. Es sabido que en los meses de noviembre y diciembre el consumo crece mucho por las fiestas (Thanksgiving, Black Friday, Navidad), posteriormente suele caer en los primeros meses del año y suele volver a repuntar con el inicio de la primavera y algunas campañas de compras (por ejemplo, "back to school" más adelante en el año).
+Viendo la evolución de la demanda por mes para las distintas categorías, se podría detectar cierta estacionalidad, siendo los primeros meses del año (generalmente desde enero hasta marzo/abril) los que menor demanda tienen, lo cual es de esperarse porque suelen ser meses de menor consumo. Es sabido que en los meses de noviembre y diciembre el consumo crece mucho por las fiestas (Thanksgiving, Black Friday, Navidad), posteriormente suele caer en los primeros meses del año y suele volver a repuntar con el inicio de la primavera y algunas campañas de compras (por ejemplo, "back to school" más adelante en el año). A su vez, parece que la demanda a ido disminuyendo, levemente, a lo largo de estos 3 años.
 
 Se procede a analizar la demanda en las distintas regiones geográficas en las cuales pertenecen estas tiendas:
 
@@ -567,7 +568,7 @@ low = "white", high = "steelblue", name = "Demanda total por estado"
 theme(legend.position = "right")
 ```
 
-Se observa que los estados con mayor demanda monetaria se encuentran en la zona de la costa este de Estados Unidos, concentrandose en los estados de Nueva York, Florida, Georgia y Carolina del Sur. Pero este analisis inicial no necesariamente brinda una evidencia con respecto a que dichos estados influyen en las ventas de las tiendas, debido a que hay distinta cantidad de tiendas en cada uno de estos. A continuación para tratar este problema, se vuelve a realizar este gráfico pero calculando la demanda promedio de cada uno de estos estados:
+Se observa que los estados con mayor demanda monetaria se encuentran en la zona de la costa este de Estados Unidos, concentrandose en los estados de Nueva York, Florida, Georgia y Carolina del Sur. Pero este análisis inicial no necesariamente brinda una evidencia con respecto a que dichos estados influyen en las ventas de las tiendas, debido a que hay distinta cantidad de tiendas en cada uno de estos. A continuación para tratar este problema, se vuelve a realizar este gráfico pero calculando la demanda promedio por tienda en cada uno de estos estados:
 
 ```{r}
 options(scipen = 999)
@@ -641,7 +642,7 @@ subplot(p1, p2, nrows = 2, shareY = TRUE, titleY = TRUE) %>%
 
 ```
 
-Se puede apreciar con claridad que las tiendas de tipo *Street* y *Mall* son las que mayores demanda presentan, con la particularidad que existen las mismas cantidades de tiendas de estos tipos (44 cada uno), y sin embargo las de tipo *Street* tuvieron una demanda de $48.194.937 mayor.
+Se puede apreciar con claridad que las tiendas de tipo *Street* y *Mall* son las que mayores demanda presentan, con la particularidad que existen las mismas cantidades de tiendas de estos tipos (44 cada uno), y sin embargo las de tipo *Street* tuvieron una demanda de \$48.194.937 mayor.
 
 Al analizar los gráficos, se observa de manera lógica que una mayor cantidad de tiendas se asocia con un incremento en la demanda.
 
@@ -713,17 +714,17 @@ Dado que Random Forest posee múltiples hiperparámetros, se lleva a cabo un pro
 
 ![](optimizacióndehiperparámetros.png)
 
-#### Random Forest + modelos ARIMA para la determinación del precio semanal
+#### Random Forest + modelos SARIMA para la determinación del precio semanal
 
-En esta opción se plantea usar Random Forest para la predicción de la demanda total, y modelos de series de tiempo para la determinación del precio en el conjunto de datos a predecir. La justificación del uso de modelos de series temporales es porque éstos captan los patrones estacionales de los datos y usar esa información es una buena estrategia para determinar el precio.
+En esta primera opción se plantea usar Random Forest para la predicción de la demanda total, y modelos de series de tiempo para la determinación del precio en el conjunto de datos a predecir. La justificación del uso de modelos de series temporales se basa en que dichos modelos pueden captar los patrones estacionales de los datos y usar esa información resultará una buena estrategia para determinar el precio.
 
-Se utilizaron 10950 modelos SARIMA que resultan de las combinaciones de las 150 tiendas y 73 subgrupos a predecir, las restantes 150 combinaciones son para las tiendas que venden subgrupos de productos de “Basketball” pero éstas son imputadas al precio que se venden los productos del “Baseball”, para modelar patrones semanales dado que se intuye que los precios en una semana de cada subgrupo de productos en cada tienda tienden a ser los mismos.
+Se utilizaron 10950 modelos SARIMA que resultan de las combinaciones de las 150 tiendas y 73 subgrupos a predecir, las restantes 150 combinaciones son para las tiendas que venden subgrupos de productos de “Basketball” pero éstas son imputadas al precio que se venden los productos de “Baseball”, para modelar patrones semanales dado que se intuye que los precios en una semana de cada subgrupo de productos en cada tienda tienden a ser los mismos.
 
 Para la determinación del precio en cada subgrupo de productos y en cada tienda, se utilizó el precio mediano de cada producto vendido en ese subgrupo de productos, en cada tienda y semana del año, la utilización de la mediana se debe a que es más robusta ante datos extremos, con esto nos referimos a que va a ser un estimador más consistente del precio.
 
 Dado que había tiendas que no vendían todos los subgrupos de productos todas las semanas, en esas se uso un precio interpolado entre la semana previa y la semana siguiente dando a entender que el precio se comportó de forma estable, luego, si el precio al inicio de la semana era faltante se usaba el precio de la semana siguiente y si el precio de la última semana era faltante se usaba el precio de la semana anterior (estos dos últimos casos son para inicio y final del período en estudio respectivamente).
 
-#### Random Forest + modelos ARIMA para la determinación del precio diario
+#### Random Forest + modelos SARIMA para la determinación del precio diario
 
 En esta opción se trabaja de forma similar, se vuelve a utilizar Random Forest para la predicción de la demanda total, y modelos de series de tiempo para la determinación del precio en el conjunto de datos a predecir.
 
@@ -731,7 +732,7 @@ La diferencia entre esta opción y la otra es la forma de como se modelan las se
 
 Nuevamente, para la determinación del precio en cada subgrupo de productos y en cada tienda, se utilizó el precio mediano de cada producto vendido en ese subgrupo de productos, en cada tienda y día del año. Dado que había tiendas que no vendían todos los subgrupos de productos todas los días, se usó un precio interpolado entre el/los día/as previo/os y el/los día/as siguiente/es dando a entender que el precio se comportó de forma estable, luego, si el precio al primer día del año era faltante se usaba el precio de el/los día/as siguiente/es y si el precio al último día del año era faltante se usaba el precio de él/las semana/as anterior/es (estos dos últimos casos son para inicio y final del período en estudio respectivamente).
 
-#### Modelos de “Gradient Boosting” + ARIMA para la determinación del precio semanal
+#### Modelos de “Gradient Boosting” + SARIMA para la determinación del precio semanal
 
 En esta opción se plantea usar modelos de Gradient Boosting para la predicción de la demanda total, que al igual que Random Forest, se utiliza para captar relaciones no lineales en los datos, cabe aclarar que no se realizó una optimización de hiperparámetros, pero se usaron hiperparámetros a conciencia. Los modelos ARIMA utilizados para la determinación del precio semanal fueron los mismos que se utilizaron en la primera opción.
 
@@ -765,12 +766,15 @@ opt_res$scoreSummary |>
   column_spec(3:4, width = "10em")
 ```
 
-Se puede observar que la combinación de hiperparámetros que tiene mayor $R^2$ promedio resulta de usar 165 árboles y 9 instancias mínimas.
-El Score de las predicciones usando las 3 estrategias antes presentadas fueron:
-•	Random Forest + modelos ARIMA para la determinación del precio semanal: 0.12876
-•	Random Forest + modelos ARIMA para la determinación del precio diario: 0.10491
-•	Gradient Boosting + modelos ARIMA para la determinación del precio semanal: 0.13456
-Por lo tanto, el modelo usado para la predicción de la demanda total en la primer semana de enero del 2024 fue “Gradient Boosting + modelos ARIMA para la determinación del precio semanal”.
+Se puede observar que la combinación de hiperparámetros que tiene mayor $R^2$ promedio resulta de usar 165 árboles y 9 instancias mínimas. El Score de las predicciones usado en Kaggle para las 3 estrategias antes presentadas fueron:
+
+-   Random Forest + modelos ARIMA para la determinación del precio semanal: 0.12876
+
+-   Random Forest + modelos ARIMA para la determinación del precio diario: 0.10491
+
+-   Gradient Boosting + modelos ARIMA para la determinación del precio semanal: 0.13456
+
+Por lo tanto, el modelo usado para la predicción de la demanda total en la primer semana de enero del 2024 fue **Gradient Boosting + modelos ARIMA para la determinación del precio semanal**.
 
 ## Objetivo 2 - Optimización de precios
 
@@ -789,6 +793,8 @@ A partir de la base creada luego de combinar las bases `eci_transactions`, `eci_
 A continuación, se realizará un análisis descriptivo con la base armada para este objetivo.
 
 ### Análisis descriptivo - Objetivo 2
+
+Para comenzar a entender que factores influyen en las ganancias producidas por los distintos productos, vamos a mostrar cuales son los productos más vendidos a través de los 3 años de estudio.
 
 ```{r}
 #df <- fread("Datos/eci_transactions.csv")  
@@ -833,64 +839,78 @@ ds_ganancias <- open_dataset("./Datos/datos_ganancias_1.parquet")
 
 #a = ds_ganancias %>% head(5) %>% collect()
 
+SKU_ventas <- ds_ganancias %>%
+  group_by(product_name,category) %>%
+  summarise(cantidad = sum(QUANTITY),
+            precio = mean(PRICE),
+            .groups = "drop") %>% 
+  collect() %>%
+  slice_max(order_by = cantidad, n = 20) 
+  
+
+plot_ly(
+  SKU_ventas,
+  y = ~cantidad,
+  x = ~reorder(product_name, -cantidad),
+  type = "bar",
+  name = "Ventas",
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "Cantidad de unidades vendidas por producto",
+    xaxis = list(title = "Producto",
+      tickfont = list(size = 9)),
+    yaxis = list(title = "Ventas")
+  ) 
+
+mean(SKU_ventas$precio)
+```
+
+Se observa que hay un producto que se ha vendido considerablemente más que el resto, dicho producto es *Fashionista Infants Collections* con un total de 205.692 ventas. Otra cuestión de interes radica en que todos los productos con mayor cantidad de ventas son productos con precios moderados/bajos, lo que indicaria que no necesariamente se correspondan con los productos que mayor ganancia proporcionaron. El precio promedio de estos productos a través de todas las transacciones fue de $35,95
+
+También, como se comentó anteriormente, resulta de interés identificar que productos son los que mayor ganancia generan , los cuales probablemente esten asociado a los productos de mayor valor.
+
+```{r}
+#SKU_ganancia_prom <- ds_ganancias %>%
+#  group_by(product_name, category) %>%
+#  summarise(GANANCIAS_ = sum(GANANCIAS),
+#            cantidad_prod = sum(QUANTITY),
+#            .groups = "drop") %>% 
+#  mutate(prom_ganancias = GANANCIAS_ / cantidad_prod) %>% 
+  #collect() %>%
+ # slice_max(order_by = prom_ganancias, n = 20) 
+
 SKU_ganancia <- ds_ganancias %>%
   group_by(product_name,category) %>%
-  summarise(ganancia    = sum(GANANCIAS),
+  summarise(ganancia = sum(GANANCIAS),
+            precio = mean(PRICE),
             .groups = "drop") %>% 
   collect() %>%
   slice_max(order_by = ganancia, n = 20) 
-  
 
 plot_ly(
   SKU_ganancia,
   y = ~ganancia,
   x = ~reorder(product_name, -ganancia),
   type = "bar",
-  name = "Ganancias",
-  marker = list(color = "steelblue")
-) %>%
-  layout(
-    title = "Ganancias totales ($) por producto",
-    xaxis = list(title = "Producto",
-      tickfont = list(size = 9)),
-    yaxis = list(title = "Ganancias")
-  ) 
-
-```
-
-Como se puede apreciar, los dos productos que mayor ganancias totales generaron son *CircuitCity Home Audio Edge X* y *Fashionista Infants Collection*, de las categorías *Electronics* y *Clothing* respectivamente. También se puede destacar de este gráfico, que 19 de los 20 productos que mayores ganancias totales generaron fueron de la categoría *Electronics*, la cual por lo visto anteriormente, es la de mayor demanda.
-
-
-
-```{r}
-SKU_ganancia_prom <- ds_ganancias %>%
-  group_by(product_name, category) %>%
-  summarise(GANANCIAS_ = sum(GANANCIAS),
-            cantidad_prod = sum(QUANTITY),
-            .groups = "drop") %>% 
-  mutate(prom_ganancias = GANANCIAS_ / cantidad_prod) %>% 
-  collect() %>%
-  slice_max(order_by = prom_ganancias, n = 20) 
-
-
-plot_ly(
-  SKU_ganancia_prom,
-  y = ~prom_ganancias,
-  x = ~reorder(product_name, -prom_ganancias),
-  type = "bar",
   name = "Ganancias promedio por unidad",
   marker = list(color = "steelblue")
 ) %>%
   layout(
-    title = "Ganancias promedio ($) por producto",
+    title = "Ganancias promedio ($) por unidad",
     xaxis = list(title = "Producto",
       tickfont = list(size = 9)),
     yaxis = list(title = "Ganancias promedio")
   ) 
+
+mean(SKU_ganancia$precio)
 ```
 
-A partir de este gráfico, se puede observar que el producto *TechPro Home Audio Ultra 2024* de la categoría *Electronics* es el que mayor ganancia promedio por unidad generó, y siendo esta categoría la que mejores resultados otorga nuevamente.
+Como se puede apreciar, hay dos productos que presentaron mayor cantidad de ganancias totales; estos son *CircuitCity Home Audio Edge X* y *Fashionista Infants Collection*, de las categorías *Electronics* y *Clothing* respectivamente. También se puede destacar de este gráfico, que 19 de los 20 productos que mayores ganancias totales generaron fueron de la categoría *Electronics*, la cual por lo visto anteriormente, es la de mayor demanda.
 
+De los productos más vendidos solo *Fashionista Infants Collection* se encuentra en el top de mayor ganancia, lo que nos lleva a pensar que a pesar de venderse en menor cantidad, algunos de los productos más costosos son los que mayor cantidad de ganancia generan. El precio promedio de los productos que más ganancia generan es de $304.97, casi 9 veces más caros que los productos más vendidos.
+
+También resulta de interes evidenciar como evolucionó la ganancia que generaron los distintos productos a través del tiempo, en este caso nos centramos en los 5 productos que más ganancias generaron y visualizamos sus ganancias mensuales durante los 3 años de estudio.
 
 ```{r}
 top_5 <- ds_ganancias %>%
@@ -953,8 +973,8 @@ low = "white", high = "steelblue", name = "Ganancia total por estado"
 theme(legend.position = "right")
 
 ```
-En el gráfico anterior podemos ver que los estados pertenecientes a la costa este de los Estados Unidos son los que producen mayor cantidad de ganancias, pero como comentamos anteriormente esto va a estar muy influenciado por la cantidad de tiendas presentes en cada estado. Para tener un panorama más real en relación a las diferencias en las ganancias de cada estado, vamos a realizar el mismo gráfico pero calculando la ganancia promedio por tienda dentro de cada estado.
 
+En el gráfico anterior podemos ver que los estados pertenecientes a la costa este de los Estados Unidos son los que producen mayor cantidad de ganancias, pero como comentamos anteriormente esto va a estar muy influenciado por la cantidad de tiendas presentes en cada estado. Para tener un panorama más real en relación a las diferencias en las ganancias de cada estado, vamos a realizar el mismo gráfico pero calculando la ganancia promedio por tienda dentro de cada estado.
 
 ```{r}
 options(scipen = 999)
@@ -966,55 +986,75 @@ low = "white", high = "steelblue", name = "Ganancia promedio por estado"
 theme(legend.position = "right")
 ```
 
-Vemos que la situación vuelve a cambiar, siendo un poco más similar la ganancia en todos los estados. Lo que si es destacable es que los estados pertenencientes al noreste del país presentan las menores ganancias por tienda entre todos los estados. Otro caso particular se da en el estado de Nuevo México, siendo el 2do estado con menores ganancias totales y el estado con mayor ganancias por tienda entre todos los estos, esto se debe a que solo hay 2 tiendas en esa región.
+Vemos que la situación vuelve a cambiar, siendo un poco más similar la ganancia en todos los estados. Lo que si es destacable es que los estados pertenencientes al noreste del país presentan las menores ganancias por tienda entre todos los estados. Otro caso particular se da en el estado de Nuevo México, siendo el segundo estado con menores ganancias totales y el estado con mayor ganancias por tienda entre todos los estos, esto se debe a que solo hay 2 tiendas en esa región.
 
 Por último, se desea evidenciar si la ganancia que producen los productos se debe a qué tanto se aumenta su precio en relación al costo del mismo (markup). Por este motivo se calcula el porcentaje de aumento en relación al costo para cada transacción (PRICE - costos)/costos y, en base a eso, se agrupan los datos en percentiles. Esto permite comparar de manera más equitativa los productos, independientemente de su nivel de precio, y observar qué rangos de aumento de precio generan mayor ganancia total. De esta manera, el análisis busca identificar los niveles de markup más efectivos para maximizar la rentabilidad.
 
 ```{r}
 # Primero calculamos el pct_increase y traemos a R
-df_local <- ds_ganancias %>%
-  mutate(
-    pct_increase = (PRICE - costos)/costos
-  ) %>%
-  collect()
+#df_local <- ds_ganancias %>%
+#  mutate(
+#    pct_increase = (PRICE - costos)/costos
+#  ) %>%
+#  collect()
 
 # Obtenemos los límites de los percentiles (0%, 20%, 40%, ..., 100%)
-pct_limits <- quantile(df_local$pct_increase, probs = seq(0, 1, 0.2), na.rm = TRUE)
+#pct_limits <- quantile(df_local$pct_increase, probs = seq(0, 1, 0.2), na.rm = TRUE)
 
 # Creamos el bin y le agregamos los límites
-plot_data_1 <- df_local %>%
-  mutate(
-    bin = ntile(pct_increase, 5)
+#plot_data_1 <- df_local %>%
+#  mutate(
+#    bin = ntile(pct_increase, 5)
+#  ) %>%
+#  group_by(bin) %>%
+#  summarise(
+#    total_ganancia = sum(GANANCIAS, na.rm = TRUE),
+#    avg_qty        = sum(QUANTITY, na.rm = TRUE)
+#  ) %>%
+#  ungroup() %>%
+#  mutate(
+#    lower_limit = pct_limits[1:5],
+#    upper_limit = pct_limits[2:6]
+#  )
+
+#write.csv(plot_data_1, "plot_data_1.csv")
+
+read_csv("Datos/plot_data_1.csv")
+
+plot_ly(data = plot_data_1, x = ~bin) %>%
+  add_bars(
+    y = ~total_ganancia,
+    name = "Ganancia total",
+    hoverinfo = "text+y"
   ) %>%
-  group_by(bin) %>%
-  summarise(
-    total_ganancia = sum(GANANCIAS, na.rm = TRUE),
-    avg_qty        = sum(QUANTITY, na.rm = TRUE)
+  add_lines(
+    y = ~avg_qty,
+    name = "Cantidad de ventas",
+    yaxis = "y2",
+    hoverinfo = "text+y"
   ) %>%
-  ungroup() %>%
-  mutate(
-    lower_limit = pct_limits[1:5],
-    upper_limit = pct_limits[2:6]
+  layout(
+    title = "Ganancias y Ventas por percentil",
+    xaxis = list(title = "Percentil",
+      showgrid = FALSE),   # sin líneas horizontales eje izquierdo),
+    yaxis = list(title = "Ganancia total",
+      showgrid = FALSE,
+      side = "right"),   # sin líneas horizontales eje izquierdo),
+    yaxis2 = list(
+      title = "Ventas totales",
+      overlaying = "y",
+      side = "left",
+      titlefont = list(color = "black"),  # opcional: color para distinguir
+      tickfont  = list(color = "black")   # opcional: mismo color en ticks
+    ),
+    legend = list(x = 0.1, y = 0.9)
   )
 
-plot_ly(
-  data = plot_data_1,
-  x = ~bin,
-  y = ~total_ganancia,
-  type = "bar",
-  hoverinfo = "text+y"
-) %>%
-  layout(
-    title = "Ganancias por percentil de incremento de precio",
-    xaxis = list(title = "Percentil"),
-    yaxis = list(title = "Ganancia total")
-  )
 ```
 
-Vemos que el segundo percentil es el que generó más ganancias, es decir, los productos que generaron más ganancias total presentaban un aumento de entre el 30% y 60% del costo del mismo. Esto es un tema crucial a la hora de definir precios óptimos, ya que, es evidente que a mayores precios se obtiene una mayor ganancia unitaria, pero esta medida afectará la cantidad de ventas. Por lo que poder entender que porcentaje de recargo realizar en cada producto es fundamental para maximizar la ganancia de cualquier negocio.
+Se observa que a pesar de que el percentil de precios más cercanos al costo son los que más cantidad de ventas producieron, pero no necesariamente se condice con el percentil que más ganancias generaron para la empresa.
 
-
-
+Vemos que el segundo percentil en relación al aumento de los precios en función del costo es el que generó más ganancias, es decir, los productos que generaron más ganancias total presentaban un aumento de entre el 30% y 60% del costo del mismo. Esto es un tema crucial a la hora de definir precios óptimos, ya que, es evidente que a mayores precios se obtiene una mayor ganancia unitaria, pero esta medida afectará la cantidad de ventas. Por lo que poder entender que porcentaje de recargo realizar en cada producto es fundamental para maximizar la ganancia de cualquier negocio.
 
 ### Técnicas estadísticas - Objetivo 2
 
@@ -1026,8 +1066,6 @@ Para optimizar el precio con el objetivo de maximizar la ganancia, se buscó mod
 
 ......
 
-
 # Resultados generales y conclusiones
 
 ......
-
