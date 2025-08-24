@@ -235,7 +235,23 @@ r2 <- ml_regression_evaluator(predicciones_rf,
                               label_col = "TOTAL_SALES_", 
                               prediction_col = "prediction",
                               metric_name = "r2")
-      
+
+gbmodel_demanda2 <- ml_gradient_boosted_trees(datos_otra_forma,
+                                             type = "regression",
+                                             response = "TOTAL_SALES_",
+                                             features = c("PRICE_", "STORE_ID", "REGION", "SUBGROUP", "mes", "anio", "category", "group", 
+                                                          "BRAND", "STORE_TYPE", "dia"),
+                                             max_iter = 20, subsampling_rate = 0.8, seed = 300, step_size = 0.3)
+
+predicciones_gbm <- gbmodel_demanda2 |> 
+  ml_predict(datos_otra_forma) |> 
+  select(TOTAL_SALES_, prediction, starts_with("probability_")) |> 
+  glimpse()
+
+r2 <- ml_regression_evaluator(predicciones_gbm, 
+                              label_col = "TOTAL_SALES_", 
+                              prediction_col = "prediction",
+                              metric_name = "r2")
 #################
 
 cant_stores_subg <- datos_otra_forma |> 
@@ -548,7 +564,7 @@ write.csv(predicciones_finales, "predicciones_finales_v13.csv", row.names = FALS
 
 ######### Predicciones de Kaggle pero usando el precio promedio de cada producto en el ultimo mes
 
-# Usar el precio promedio del ultimo mes
+# Usar el precio mediano del ultimo mes
 ids_test_sep <- ids_test |> 
   mutate(STORE_SUBGROUP_DATE_ID_2 = STORE_SUBGROUP_DATE_ID) |> 
   separate(STORE_SUBGROUP_DATE_ID_2, into = c("STORE_ID", "SUBGROUP", "DATE_ID"), sep = "_") |> 
@@ -624,7 +640,7 @@ ids_test_sep_mismo_precio <- rbind(ids_test_sep_mismo_precio_sin_bask_base, ids_
 
 ids_predicciones_sin_bask <- sparklyr::copy_to(sc, ids_test_sep_mismo_precio, overwrite = TRUE)
 
-predicciones_ids_sin_bask <- rf_model_def |> 
+predicciones_ids_sin_bask <- gbmodel_demanda2 |> 
   ml_predict(ids_predicciones_sin_bask) |> 
   select(STORE_SUBGROUP_DATE_ID, SUBGROUP, STORE_ID, prediction, QUANTITY_, dia, starts_with("probability_")) |> 
   rename(TOTAL_SALES = prediction) |> 
@@ -651,7 +667,7 @@ predicciones_ids_completa <- predicciones_ids_completa |>
 predicciones_finales <- ids_test |> left_join(predicciones_ids_completa, by = "STORE_SUBGROUP_DATE_ID")
 
 ### Guardamos las predicciones en un csv
-write.csv(predicciones_finales, "Predicciones/predicciones_finales_v25.csv", row.names = FALSE, quote = FALSE)
+write.csv(predicciones_finales, "Predicciones/predicciones_finales_v32.csv", row.names = FALSE, quote = FALSE)
 
 # Prediccion de las series usando el precio diario
 
@@ -745,4 +761,100 @@ predicciones_ids_completa <- predicciones_ids_completa |>
 predicciones_finales <- ids_test |> left_join(predicciones_ids_completa, by = "STORE_SUBGROUP_DATE_ID")
 
 ### Guardamos las predicciones en un csv
-write.csv(predicciones_finales, "Predicciones/predicciones_finales_v26.csv", row.names = FALSE, quote = FALSE)
+# write.csv(predicciones_finales, "Predicciones/predicciones_finales_v26.csv", row.names = FALSE, quote = FALSE)
+
+# Prediccion usando el precio que mas ganancia da en cada producto
+ids_test_sep <- ids_test |> 
+  mutate(STORE_SUBGROUP_DATE_ID_2 = STORE_SUBGROUP_DATE_ID) |> 
+  separate(STORE_SUBGROUP_DATE_ID_2, into = c("STORE_ID", "SUBGROUP", "DATE_ID"), sep = "_") |> 
+  mutate(DATE_ID = as_date(DATE_ID))
+
+ids_test_sep <- ids_test_sep |> 
+  left_join(eci_stores_clusters_join |> collect(), by = "STORE_ID") |> 
+  select(!c(STORE_NAME, ADDRESS1, ADDRESS2, CITY, STATE, ZIP, OPENDATE, CLOSEDATE, STORE_TYPE, CLUSTER)) |> 
+  mutate(mes = lubridate::month(DATE_ID),
+         dia = lubridate::day(DATE_ID))
+
+precio_mediano <- datos_otra_forma |> 
+  mutate(DATE_ID = as_date(DATE_ID)) |> 
+  filter(DATE_ID >= "2023-12-01") |> 
+  group_by(SUBGROUP, STORE_ID, category, group, STORE_TYPE) |> 
+  summarise(PRICE_ = dplyr::sql("percentile_approx(PRICE_, 0.5)")) |> 
+  ungroup() |> 
+  collect()
+
+# Lectura de los datos de los precios predichos
+precios_subgrupo_suma <- read.csv("Datos/precios_subgrupo_mediana.csv")
+
+precio_mediano <- precio_mediano |> 
+  left_join(precios_subgrupo_suma, by = c("STORE_ID", "SUBGROUP"))
+
+ids_test_sep_mismo_precio_sin_bask_base <- ids_test_sep |> 
+  filter(SUBGROUP != "Basketball") |> 
+  filter(SUBGROUP != "Baseball") |> 
+  left_join(precio_mediano, by = c("STORE_ID", "SUBGROUP")) |> 
+  mutate(dia = lubridate::day(DATE_ID),
+         anio = lubridate::year(DATE_ID))
+
+ids_test_sep_mismo_precio_bask <- ids_test_sep |> 
+  filter(SUBGROUP == "Basketball") |> 
+  left_join((precio_mediano |> filter(SUBGROUP == "Baseball")), by = c("STORE_ID")) |> 
+  select(-c(SUBGROUP.y)) |> 
+  rename(SUBGROUP = SUBGROUP.x) |> 
+  mutate(PRICE_ = PRICE_) |> 
+  mutate(dia = lubridate::day(DATE_ID),
+         anio = lubridate::year(DATE_ID))
+
+ids_test_sep_mismo_precio_base <- ids_test_sep |> 
+  filter(SUBGROUP == "Baseball") |> 
+  left_join((precio_mediano |> filter(SUBGROUP == "Baseball")), by = c("STORE_ID")) |> 
+  select(-c(SUBGROUP.y)) |> 
+  rename(SUBGROUP = SUBGROUP.x) |> 
+  mutate(PRICE_ = PRICE_) |> 
+  mutate(dia = lubridate::day(DATE_ID),
+         anio = lubridate::year(DATE_ID))
+
+ids_test_sep_mismo_precio_sin_bask_base <- ids_test_sep_mismo_precio_sin_bask_base |> 
+  left_join(prom_dia_mes, by = c("STORE_ID", "SUBGROUP", "dia")) |> 
+  select(STORE_SUBGROUP_DATE_ID, STORE_ID, SUBGROUP, DATE_ID, REGION, mes.x, dia, PRICE, QUANTITY_avg, category, group, BRAND, STORE_TYPE, anio) |> 
+  mutate(QUANTITY_ = ifelse(is.na(QUANTITY_avg), 0, round(QUANTITY_avg))) |>
+  rename(mes = mes.x, PRICE_ = PRICE)
+
+ids_test_sep_mismo_precio_base <- ids_test_sep_mismo_precio_base |> 
+  left_join(prom_dia_mes, by = c("STORE_ID", "SUBGROUP", "dia")) |> 
+  select(STORE_SUBGROUP_DATE_ID, STORE_ID, SUBGROUP, DATE_ID, REGION, mes.x, dia, PRICE, QUANTITY_avg, category, group, BRAND, STORE_TYPE, anio) |> 
+  mutate(QUANTITY_ = ifelse(is.na(QUANTITY_avg), 0, round(QUANTITY_avg))) |>
+  rename(mes = mes.x, PRICE_ = PRICE)
+
+ids_test_sep_mismo_precio <- rbind(ids_test_sep_mismo_precio_sin_bask_base, ids_test_sep_mismo_precio_base)
+
+ids_predicciones_sin_bask <- sparklyr::copy_to(sc, ids_test_sep_mismo_precio, overwrite = TRUE)
+
+predicciones_ids_sin_bask <- gbmodel_demanda |> 
+  ml_predict(ids_predicciones_sin_bask) |> 
+  select(STORE_SUBGROUP_DATE_ID, SUBGROUP, STORE_ID, prediction, QUANTITY_, dia, starts_with("probability_")) |> 
+  rename(TOTAL_SALES = prediction) |> 
+  collect()
+
+predicciones_ids_baseball <- predicciones_ids_sin_bask |> 
+  filter(SUBGROUP == "Baseball") |> 
+  mutate(TOTAL_SALES = TOTAL_SALES * 0.5)
+
+predicciones_ids_bask <- ids_test_sep_mismo_precio_bask |> 
+  left_join(predicciones_ids_baseball, by = c("STORE_ID", "dia")) |> 
+  select(STORE_SUBGROUP_DATE_ID.x, STORE_ID, SUBGROUP.x, QUANTITY_, dia, TOTAL_SALES) |> 
+  rename(STORE_SUBGROUP_DATE_ID = STORE_SUBGROUP_DATE_ID.x, SUBGROUP = SUBGROUP.x)
+
+predicciones_ids_sin_bask_base <- predicciones_ids_sin_bask |> 
+  filter(SUBGROUP != "Basketball") |> 
+  filter(SUBGROUP != "Baseball")
+
+predicciones_ids_completa <- rbind(predicciones_ids_sin_bask_base, predicciones_ids_baseball, predicciones_ids_bask)
+predicciones_ids_completa <- predicciones_ids_completa |> 
+  select(STORE_SUBGROUP_DATE_ID, TOTAL_SALES) |>
+  mutate(TOTAL_SALES = TOTAL_SALES)
+
+predicciones_finales <- ids_test |> left_join(predicciones_ids_completa, by = "STORE_SUBGROUP_DATE_ID")
+
+### Guardamos las predicciones en un csv
+write.csv(predicciones_finales, "Predicciones/predicciones_finales_v36.csv", row.names = FALSE, quote = FALSE)
