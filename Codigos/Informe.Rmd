@@ -568,9 +568,11 @@ options(scipen = 999)
 
 plot_usmap(data = plot_data, values = "total_sales", regions = "states") +
 scale_fill_continuous(
-low = "white", high = "#A61C3C", name = "Demanda total por estado"
+low = "white", high = "#A61C3C", name = "Demanda (en $)"
 ) +
-theme(legend.position = "right")
+  theme(legend.position = "right",
+        plot.title = element_text(hjust = 0.5, size = 14)) +
+  ggtitle("Demanda total según estado")
 ```
 
 Se observa que los estados con mayor demanda monetaria se encuentran en la zona de la costa este de Estados Unidos, concentrandose en los estados de Nueva York, Florida, Georgia y Carolina del Sur. Pero este análisis inicial no necesariamente brinda una evidencia con respecto a que dichos estados influyen en las ventas de las tiendas, debido a que hay distinta cantidad de tiendas en cada uno de estos. A continuación para tratar este problema, se vuelve a realizar este gráfico pero calculando la demanda promedio por tienda en cada uno de estos estados:
@@ -580,9 +582,11 @@ options(scipen = 999)
 
 plot_usmap(data = plot_data, values = "ventas_tiendas", regions = "states") +
 scale_fill_continuous(
-low = "white", high = "#A61C3C", name = "Demanda promedio por estado"
+low = "white", high = "#A61C3C", name = "Demanda (en $)"
 ) +
-theme(legend.position = "right")
+  theme(legend.position = "right",
+        plot.title = element_text(hjust = 0.5, size = 14)) +
+  ggtitle("Demanda promedio por tienda según estado")
 ```
 
 Al realizar esta modificación, el panorama ya no es el mismo y se puede observar que los estados que mayor demanda promedio tienen se ubican en el suroeste y son los estados de Nuevo México y Arizona (contando con 2 y 5 tiendas respectivamente). Otra particularidad que no se evidenciaba en el otro gráfico, es que los estados con menor demanda promedio se encuentran todos en la región noroeste del país, lo que lleva a pensar que puede que esa sea una zona con menor consumo.
@@ -975,10 +979,13 @@ collect()
 options(scipen = 999)
 
 plot_usmap(data = plot_data, values = "ganancias", regions = "states") +
-scale_fill_continuous(
-low = "white", high = "#A61C3C", name = "Ganancia total por estado"
-) +
-theme(legend.position = "right")
+  scale_fill_continuous(
+    low = "white", high = "#A61C3C", name = "Ganancia (en $)"
+  ) +
+  theme(legend.position = "right",
+        plot.title = element_text(hjust = 0.5, size = 14)) +
+  ggtitle("Ganancias totales según estado")
+
 
 ```
 
@@ -989,9 +996,11 @@ options(scipen = 999)
 
 plot_usmap(data = plot_data, values = "ganancias_tiendas", regions = "states") +
 scale_fill_continuous(
-low = "white", high = "#A61C3C", name = "Ganancia promedio por estado"
+low = "white", high = "#A61C3C", name = "Ganancia (en $)"
 ) +
-theme(legend.position = "right")
+  theme(legend.position = "right",
+        plot.title = element_text(hjust = 0.5, size = 14)) +
+  ggtitle("Ganancias promedio por tienda según estado")
 ```
 
 Se evidencia que la situación vuelve a cambiar, siendo un poco más similar la ganancia en todos los estados. Lo que si es destacable es que los estados pertenencientes al noreste del país presentan las menores ganancias por tienda entre todos los estados. Otro caso particular se da en el estado de Nuevo México, siendo el segundo estado con menores ganancias totales y el estado con mayor ganancias por tienda entre todos los estos, esto se debe a que solo hay 2 tiendas en esa región.
@@ -1085,15 +1094,29 @@ Centrandose en la predicción de la demanda, se han probado distintos modelos qu
 
 Luego a la hora de pensar estrategias para la maximización de las ganancias en base a la fluctuación en el precio de los productos, pudimos identificar las siguientes cuestiones de interés:
 
+- *Estrategias de ventas*
 
+Como se pudo observar a lo largo de este trabajo, los productos que generaron mayor ganancia en los últimos 3 años corresponden a la categoría *Electronics*. Estos artículos, en general, tienen un valor unitario más elevado y, en consecuencia, una ganancia por unidad superior, a pesar de que la cantidad total de ventas no sea tan alta en comparación con otras categorías.
 
-- Centrarse en los productos mas caros, que generan mas ganancias
+En este sentido, una recomendación a la empresa sería evaluar la posibilidad de orientar parte de su estrategia de ventas hacia locales especializados en productos electrónicos. Este tipo de productos, al aportar un margen de ganancia más alto, podrían convertirse en un pilar de la rentabilidad futura. A su vez, esto podría estar acompañado en un futuro de una expansión selectiva de locales, priorizando la apertura de tiendas en zonas con alta demanda potencial de productos tecnológicos (grandes centros urbanos, polos universitarios, regiones con mayor ingreso medio) pudiendo maximizar el impacto de la estrategia.
 
-- Markup
+- *Markup*
 
-- Zonas de mayor ganancia
+Como se mencionó a lo largo de este informe, el *markup* representa el porcentaje que se adiciona al costo de un producto para establecer su precio de venta. Definirlo correctamente es fundamental, ya que un *markup* demasiado elevado puede reducir la demanda al alejar a los clientes, mientras que uno demasiado bajo puede comprometer la rentabilidad de la empresa. En este sentido, encontrar un equilibrio resulta esencial para sostener un nivel de ingresos saludable y competitivo.
 
-Hacer un mapa de la ubicacion de los clientes y planificar en base a eso
+Si bien los niveles de *markup* pueden variar en función de la industria y del tipo de producto, el análisis realizado con los datos disponibles muestra que un rango comprendido entre el 30% y el 60% ha generado los mayores niveles de ganancia.
+
+Como recomendación se sugiere que la empresa adopte una política de precios flexible dentro de este rango, ajustando el *markup* en función de la elasticidad de la demanda y de las condiciones del mercado. Dentro de ese margen, conviene ajustar el porcentaje según los objetivos del momento: un *markup* más alto aumentará la ganancia por unidad pero puede reducir las ventas, mientras que uno más bajo puede favorecer una mayor rotación de productos y ayudar a sostener o ganar mercado. Lo más conveniente es probar diferentes niveles dentro de este rango para encontrar el equilibrio que maximice la ganancia total sin perder competitividad.
+
+- *Zonas de mayor ganancia*
+
+En base a lo visto anteriormente, el estado que presentó una mayor ganancia promedio por tienda fue el estado de *Nuevo México*, con la particularidad de que en dicho estado solo se encuentran 2 tiendas minoristas. Este resultado sugiere una oportunidad estratégica: **considerar la apertura de nuevos puntos de venta en dicho estado**, con el fin de aprovechar el potencial de rentabilidad que allí se evidencia.
+
+- *Información sobre los clientes*
+
+Al no poder relacionar la información de los clientes con las transacciones realizadas, las posibilidades de análisis se acotan en gran medida. Una solución para poder aprovechar un poco la información disponible en esta base se centra en analizar la geoespacialidad de los clientes, es decir, poder evidenciar en que zonas del país hay mayor cantidad de clientes/socios.
+
+Se visualiza la cantidad de clientes según el estado en el cual residen.
 
 ```{r}
 clientes_estado <- eci_customer_data %>%
@@ -1106,10 +1129,12 @@ options(scipen = 999)
 
 plot_usmap(data = clientes_estado, values = "cant_clientes", regions = "states") +
 scale_fill_continuous(
-low = "white", high = "#A61C3C", name = "Cantidad de clientes por estado"
+low = "white", high = "#A61C3C", name = "Cantidad de clientes"
 ) +
-theme(legend.position = "right")
+  theme(legend.position = "right",
+        plot.title = element_text(hjust = 0.5, size = 14)) +
+  ggtitle("Cantidad de clientes según estado")
+
 ```
 
-
-Durante el desarrollo del trabajo, nos encontramos con *limitaciones computacionales* al entrenar modelos de predicción y optimización de precios, debido a que los equipos disponibles no contaban con capacidad de procesamiento elevada. Esto implicó que ciertas exploraciones de parámetros y pruebas de modelos más complejos fueran más lentas o directamente inviables. De contar con recursos en la **nube**, sería posible ampliar significativamente el horizonte de experimentación, permitiendo probar más combinaciones de parámetros, generar mayor cantidad de pronósticos y, en última instancia, mejorar la calidad y robustez de las soluciones propuestas.
+Se observa que los estados del sureste de los Estados Unidos son los que presentan mayor número de clientes, lo que resulta de interés ya que en estos mismos estados se presentó una mayor demanda y una mayor cantidad de ganancias. Las zonas con menor presencia de consumidores representan una oportunidad de crecimiento para la empresa. Una estrategia posible sería fortalecer la difusión en redes sociales y canales digitales, resaltando los beneficios de convertirse en *loyalty members* y generando campañas de publicidad segmentadas que apunten a captar nuevos clientes en dichas regiones.
