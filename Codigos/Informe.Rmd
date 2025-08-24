@@ -1078,13 +1078,101 @@ En particular, el segundo percentil —correspondiente a aumentos de precios ent
 
 ### Técnicas estadísticas
 
-Para optimizar el precio con el objetivo de maximizar la ganancia, se buscó modelar la cantidad vendida en función de distintas variables explicativas: `PRICE`, `STORE_ID`, `SKU`, `category`, `group`, `BRAND` y `REGION`. Inicialmente se evaluaron diferentes enfoques, como Regresión Poisson, Random Forest y Gradient Boosting, sin embargo, debido a la sobredispersión observada en los datos, se optó por utilizar modelos más flexibles, capaces de capturar relaciones no lineales, destacándose en este sentido los modelos de Gradient Boosting. 
+Para optimizar el precio con el objetivo de maximizar la ganancia, se buscó modelar la cantidad vendida en función de distintas variables explicativas: `PRICE`, `STORE_ID`, `SKU`, `category`, `group`, `BRAND` y `REGION`. Dado que los productos de Basketball y Baseball comparten el mismo `SKU`, no fue posible diferenciarlos directamente. Además, no se disponía de información específica sobre las ventas de Basketball. Considerando que ambos productos presentan costos similares y que era razonable suponer una demanda similar, se decidió modelar únicamente los productos de Baseball y asignar el mismo precio a los correspondientes de Basketball.
+
 
 Una vez entrenado el modelo, se construyó una grilla de precios que abarca desde el valor mínimo hasta el máximo observado, con una longitud de 25 puntos. Para cada precio de la grilla se estimó la cantidad vendida utilizando el modelo ajustado. A partir de estas predicciones se calculó la variable: `GANANCIAS` = (`PRICE` - `costos`) x `QUANTITY`, y finalmente se seleccionó el precio que maximiza dicha ganancia.
 
+#### Regresión Poisson
+
+Dado que la variable respuesta es discreta, una alternativa adecuada para modelar los datos es la Regresión Poisson. El modelo se expresa como:
+
+$g(\lambda) = X^t \beta + \epsilon, \ \ \epsilon \sim N(0, \sigma^2I)$
+
+- $Y$ es el vector de variable respuesta que se distribuye $Poisson(\lambda)$
+- $g$ es la función de enlace del modelo que es, $ln(\lambda)$
+- $X$ es la matriz de diseño
+- $\beta$ es el vector de parámetros
+- $\epsilon$ es el vector de errores aleatorios
+
+Entre sus ventajas se destaca la facilidad de interpretación del modelo y su adecuación a datos de conteo. Sin embargo, también presenta limitaciones, como el supuesto de que la media y la varianza son iguales ($E(Y) = Var(Y)$), lo cual no siempre se cumple en la práctica. En esos casos, su aplicación puede llevar a conclusiones incorrectas.
+
+#### Gradient Boosting
+
+Otra alternativa es el Gradient Boosting, un enfoque más flexible que no requiere supuestos tan estrictos como la Regresión Poisson. Este tipo de modelo permite capturar relaciones no lineales y patrones complejos en los datos, lo que le otorga mayor capacidad predictiva frente a modelos lineales generalizados.
+
 ### Resultados
 
-......
+#### Regresión Poisson
+
+Tras el entrenamiento del modelo con los datos disponibles, se lo aplicó para estimar el precio óptimo de cada producto en cada tienda. Los resultados obtenidos se muestran en la siguiente tabla.
+
+Dado que el número total de combinaciones posibles entre productos y tiendas asciende a 128.100, y con el objetivo de facilitar la interpretación de los resultados, en este documento se presentan únicamente 1.000 combinaciones seleccionadas a modo ilustrativo.
+
+```{r tabla reg poisson}
+# Lectura de los datos
+precios_optimizados_reg_poisson <- read.csv("Predicciones/precios_optimizados_poisson.csv")
+
+precios_optimizados_reg_poisson |>
+  select(STORE_ID, SKU, category, group, BRAND, REGION, PRICE) |>
+  top_n(n = 1000, PRICE) |> 
+  kable(
+    digits = 4,
+    col.names = c("ID Tiendas", "SKU", "Categoría", "Grupo", "Cadena", "Región", "Precio"),
+    format = "html",
+    booktabs = TRUE,
+    align = "c" 
+  ) |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = FALSE,
+    position = "center",
+    font_size = 14
+  ) |>
+  row_spec(0, bold = TRUE, color = "white", background = "steelblue") |>
+  column_spec(1, width = "6em") |>   
+  column_spec(2, width = "10em") |>  
+  column_spec(3:4, width = "10em") |> 
+  scroll_box()
+```
+
+#### Gradient Boosting
+
+Una vez entrenado el modelo con los datos, se procedió a aplicarlo para estimar el precio óptimo de cada producto en cada tienda. El resultado se resume en la siguiente tabla.
+
+Dado que el número total de combinaciones posibles entre productos y tiendas asciende a 128.100, y con el objetivo de facilitar la interpretación de los resultados, en este documento se presentan únicamente 1.000 combinaciones seleccionadas a modo ilustrativo.
+
+```{r tabla gbm}
+# Lectura de los datos
+precios_optimizados_gbm <- read.csv("../Predicciones/precios_optimizados_gbm.csv")
+
+precios_optimizados_gbm |>
+  select(STORE_ID, SKU, category, group, BRAND, REGION, PRICE) |>
+  top_n(n = 1000, PRICE) |> 
+  kable(
+    digits = 4,
+    col.names = c("ID Tiendas", "SKU", "Categoría", "Grupo", "Cadena", "Región", "Precio (USD)"),
+    format = "html",
+    booktabs = TRUE,
+    align = "c" 
+  ) |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = FALSE,
+    position = "center",
+    font_size = 14
+  ) |>
+  row_spec(0, bold = TRUE, color = "white", background = "steelblue") |>  
+  column_spec(1, width = "6em") |>   
+  column_spec(2, width = "8em") |>  
+  column_spec(3:5, width = "8em") |> 
+  column_spec(6:7, width = "6em") |> 
+  scroll_box()
+```
+
+#### Comparación
+
+Una vez realizada la optimización del precio para cada combinación de producto y tienda con ambas estrategias, es necesario determinar cuál resulta más conveniente. En este caso, se considera más apropiado trabajar con modelos capaces de capturar patrones no lineales, por lo que la alternativa de "Gradient Boosting" representa la opción preferida. No obstante, disponer de los resultados de ambas metodologías aporta mayor solidez al análisis, por lo que los hallazgos obtenidos mediante la "Regresión Poisson" no deberían ser descartados.
 
 # Resultados generales y conclusiones
 
