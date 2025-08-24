@@ -332,17 +332,12 @@ Contiene información de 801923 clientes, identificando datos personales de los 
 
 ## Manejo de los datos
 
-Antes de iniciar el análisis, fue necesario realizar una inspección exhaustiva de los datos. Este proceso permitió identificar aspectos relevantes vinculados al preprocesamiento, tales como la detección de valores atípicos, la presencia de datos faltantes y otras cuestiones que requerían tratamiento previo. Dichas cuestiones se enuncian a continuación:
+Antes de iniciar el análisis, fue necesario realizar una inspección exhaustiva de los datos. Este proceso permitió identificar aspectos relevantes vinculados al preprocesamiento, tales como la detección de datos faltantes y otras cuestiones que requerían tratamiento previo. Dichas cuestiones se enuncian a continuación:
 
 -   *Base de clientes (`eci_customer_data`).*
 
 Al analizar las variables disponibles en esta base, quedó evidenciado que no hay una variable que conecte la información aquí disponible con el resto de las bases. Es decir, se cuenta con la información de los clientes, pero no es posible identificar en que tienda compra cada uno, o que transacción realiza cada uno. Por este motivo no se utilizará esta información, al menos en este primer análisis.
 
--   *Outliers.*
-
-Observando las variables cuantitativas de las bases de datos que se usarán inicialmente **no** se detectaron valores atípicos.
-
-(Insertamos tabla con quartiles, minimo, media y maximo?)
 
 -   *Valores faltantes.*
 
@@ -539,6 +534,8 @@ p <- ventas_mensuales %>%
     x = ~month,
     y = ~total_sales,
     color = ~category,
+    colors = c("#4e79a7", "#f28e2b", "#76b7b2", "#e15759", "#b07aa1",
+          "#9c755f", "#59a14f", "#edc949"),
     type = "scatter",
     mode = "lines"
   ) %>%
@@ -1082,11 +1079,19 @@ Una vez entrenado el modelo, se construyó una grilla de precios que abarca desd
 
 # Resultados generales y conclusiones
 
-Ideas:
+El presente apartado tiene como objetivo sintetizar los principales hallazgos obtenidos a lo largo de este trabajo, en el cual el enfoque estuvo centrado en dos ejes centrales: por un lado, la predicción de la demanda a partir de las transacciones de los últimos 3 años; y por otro, la optimización de precios con el fin de maximizar la ganancia.
 
-Zonas de mayor ventas
+Centrandose en la predicción de la demanda, se han probado distintos modelos que incorporan distintas variables que podrían ayudar a explicar la variable respuesta y mejorar dichas predicciones, pero a su vez quedo en evidencia que se presentaban *limitaciones computacionales* al entrenar los modelos de predicción, debido a que los equipos disponibles no contaban con capacidad de procesamiento elevada. Esto implicó que ciertas exploraciones de parámetros y pruebas de modelos más complejos fueran más lentas o directamente inviables. De contar con recursos en la **nube** (AWS, Google Cloud Platform o Microsoft Azure), sería posible ampliar significativamente el horizonte de experimentación, permitiendo probar más combinaciones de parámetros, generar mayor cantidad de pronósticos y, en última instancia, mejorar la calidad y robustez de las soluciones propuestas.
 
-Centrarse en los productos mas caros, que generan mas ganancias
+Luego a la hora de pensar estrategias para la maximización de las ganancias en base a la fluctuación en el precio de los productos, pudimos identificar las siguientes cuestiones de interés:
+
+
+
+- Centrarse en los productos mas caros, que generan mas ganancias
+
+- Markup
+
+- Zonas de mayor ganancia
 
 Hacer un mapa de la ubicacion de los clientes y planificar en base a eso
 
@@ -1106,3 +1111,5 @@ low = "white", high = "#A61C3C", name = "Cantidad de clientes por estado"
 theme(legend.position = "right")
 ```
 
+
+Durante el desarrollo del trabajo, nos encontramos con *limitaciones computacionales* al entrenar modelos de predicción y optimización de precios, debido a que los equipos disponibles no contaban con capacidad de procesamiento elevada. Esto implicó que ciertas exploraciones de parámetros y pruebas de modelos más complejos fueran más lentas o directamente inviables. De contar con recursos en la **nube**, sería posible ampliar significativamente el horizonte de experimentación, permitiendo probar más combinaciones de parámetros, generar mayor cantidad de pronósticos y, en última instancia, mejorar la calidad y robustez de las soluciones propuestas.
