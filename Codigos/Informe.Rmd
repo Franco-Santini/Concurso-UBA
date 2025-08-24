@@ -37,6 +37,8 @@ eci_product_master <- read_csv("Datos/eci_product_master.csv")
 
 eci_stores_clusters <- read_csv("Datos/eci_stores_clusters.csv")
 
+eci_customer_data <- read_csv("Datos/eci_customer_data.csv")
+
 load("../datos_tabla.RData", verbose = TRUE)
 ```
 
@@ -1068,4 +1070,27 @@ Para optimizar el precio con el objetivo de maximizar la ganancia, se buscó mod
 
 # Resultados generales y conclusiones
 
-......
+Ideas:
+
+Zonas de mayor ventas
+
+Centrarse en los productos mas caros, que generan mas ganancias
+
+Hacer un mapa de la ubicacion de los clientes y planificar en base a eso
+
+```{r}
+clientes_estado <- eci_customer_data %>%
+group_by(state) %>%
+summarise(cant_clientes = n_distinct(client_id),
+.groups = "drop"
+)
+
+options(scipen = 999)
+
+plot_usmap(data = clientes_estado, values = "cant_clientes", regions = "states") +
+scale_fill_continuous(
+low = "white", high = "steelblue", name = "Cantidad de clientes por estado"
+) +
+theme(legend.position = "right")
+```
+
