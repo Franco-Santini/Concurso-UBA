@@ -13,18 +13,18 @@ library(zoo)
 
 # Configuraciones de spark
 config <- spark_config()
-config$spark.driver.memory <- "12g"   # subir memoria del driver
-config$spark.executor.memory <- "12g" # igual en el executor (en local son el mismo proceso)
-config$spark.memory.fraction <- 0.8
-config$spark.sql.shuffle.partitions <- 8
-config$spark.executor.cores <- 4
+# config$spark.driver.memory <- "12g"   # subir memoria del driver
+# config$spark.executor.memory <- "12g" # igual en el executor (en local son el mismo proceso)
+# config$spark.memory.fraction <- 0.8
+# config$spark.sql.shuffle.partitions <- 8
+# config$spark.executor.cores <- 4
 # Driver (R) -> Spark
-# config$spark.driver.memory <- "2g"
-# # config$spark.driver.memoryOverhead <- "512m"
-# config$spark.executor.instances <- 2     # Máximo 2 instancias en local
-# config$spark.executor.memory <- "2g"
-# # config$spark.executor.memoryOverhead <- "512m"
-# config$spark.executor.cores <- 2         # Aprovecha CPU sin saturar RAM
+config$spark.driver.memory <- "2g"
+# config$spark.driver.memoryOverhead <- "512m"
+config$spark.executor.instances <- 2     # Máximo 2 instancias en local
+config$spark.executor.memory <- "2g"
+# config$spark.executor.memoryOverhead <- "512m"
+config$spark.executor.cores <- 2         # Aprovecha CPU sin saturar RAM
 
 # Establecemos la coneccion con spark
 sc <- spark_connect(master = "local", config = config)
@@ -126,36 +126,28 @@ datos_series_semanal <- datos_otra_forma |>
   ungroup() |> 
   collect()
 
-datos_series_diarios_ventas <- datos_otra_forma |>
+datos_series_semanal_ventas <- datos_otra_forma |>
   group_by(STORE_ID, SUBGROUP, DATE_ID) |> 
   summarise(TOTAL_SALES_ = sum(TOTAL_SALES_)) |> 
-  ungroup()
+  ungroup() |> 
+  collect()
 
-datos_parte_1 <- datos_series_diarios_ventas |>
-                      mutate(DATE_ID = as_date(DATE_ID)) |>
-                      filter(DATE_ID <= "2021-12-31") |>
-                      collect()
+datos_parte_1 <- datos_series_semanal_ventas |>
+  mutate(DATE_ID = as_date(DATE_ID)) |>
+  filter(DATE_ID <= "2021-12-31") |>
+  collect()
 
-<<<<<<< HEAD
-datos_parte_2 <- datos_series_diarios_ventas |>
+datos_parte_2 <- datos_series_semanal_ventas |>
   mutate(DATE_ID = as_date(DATE_ID)) |>
   filter(DATE_ID > "2021-12-31" & DATE_ID <= "2022-12-31")|>
   collect()
-=======
-datos_parte_2 <- datos_series_semanal_ventas |>
-                      mutate(DATE_ID = as_date(DATE_ID)) |>
-                      filter(DATE_ID > "2021-12-31" & DATE_ID <= "2022-12-31")|>
-                      collect()
->>>>>>> 00861ae1205c73ac0d48ac2deb714cb52cef56b3
 
 datos_parte_3 <- datos_series_semanal_ventas |>
   mutate(DATE_ID = as_date(DATE_ID)) |>
-  filter(DATE_ID > "2022-12-31" & DATE_ID <= "2023-12-31") |>
+  filter(DATE_ID <= DATE_ID > "2022-12-31" & DATE_ID <= "2023-12-31") |>
   collect()
 
-#write.csv(datos_parte_1, "Datos/datos_series_diarios_ventas_parte_1.csv")
-#write.csv(datos_parte_2, "Datos/datos_series_diarios_ventas_parte_2.csv")
-#write.csv(datos_parte_3, "Datos/datos_series_diarios_ventas_parte_3.csv")
+write.csv(rbind(datos_parte_1,datos_parte_2, datos_parte_3), "Datos/datos_series_diarios_ventas.csv")
 
 # Guardamos los datos porque tarda mucho
 # write.csv(datos_series_semanal, "Datos/datos_series_semanal.csv", row.names = FALSE, quote = FALSE)
@@ -174,7 +166,7 @@ df <- expand.grid(STORE_ID = unique(df_series_completo$STORE_ID),
                   semanas_anio = semanas_anio)
 
 df_fechas <- data.frame(fecha = fechas_semanal,
-           semanas_anio =  paste(week(fechas_semanal), year(fechas_semanal), sep = "/"))
+                        semanas_anio =  paste(week(fechas_semanal), year(fechas_semanal), sep = "/"))
 
 # Precio mediano de la serie semana a semana
 # datos_series_completo <- df |> 
@@ -216,6 +208,7 @@ datos_series_completo <- datos_series_completo |>
 
 # Lectura de los datos series semanales
 datos_series_completo <- read.csv("Datos/datos_series_semanal_nuevo.csv")
+datos_series_diarios_ventas <- read.csv("Datos/datos_serie_diarios_ventas")
 
 # Datos de las series para trabajar con modelos SARIMA
 datos_series_completo <- datos_series_completo |> 
@@ -320,8 +313,8 @@ cl <- makePSOCKcluster(num_cores)
 registerDoParallel(cl)
 
 resultado_precio_diario <- foreach(i = unique(datos_series_diarios_completo$STORE_ID), 
-                            .combine = bind_rows,
-                            .packages = c("fable", "fabletools", "dplyr")) %:%
+                                   .combine = bind_rows,
+                                   .packages = c("fable", "fabletools", "dplyr")) %:%
   foreach(j = unique(datos_series_diarios_completo$SUBGROUP), 
           .combine = bind_rows,
           .packages = c("fable", "fabletools", "dplyr")) %dopar% {
@@ -360,21 +353,67 @@ df_max_ganancia <- eci_transactions_stores_prod |>
          mes = as.character(month(DATE)),
          anio = as.numeric(year(DATE))) 
 
-entrenamiento <- sdf_random_split(df_max_ganancia, train = 0.85, test = 0.15)
-
 gbmodel <- ml_gradient_boosted_trees(df_max_ganancia,
                                      type = "regression",
                                      response = "QUANTITY",
-                                     features = c("PRICE", "STORE_ID", "SKU", "category", "group", "BRAND"),
-                                     max_iter = 8)
+                                     features = c("PRICE", "STORE_ID", "SKU", "category", "group", "BRAND", "REGION"),
+                                     max_iter = 9, subsampling_rate = 0.8, step_size = 0.5)
 
 predicciones_glm <- gbmodel |> 
-  ml_predict(entrenamiento$test) |> 
+  ml_predict(df_max_ganancia) |> 
   select(QUANTITY, prediction, starts_with("probability_")) |> 
   glimpse()
 
+rf_model_cantidad <- ml_random_forest_regressor(df_max_ganancia,
+                                                QUANTITY ~ PRICE + STORE_ID + SKU + category + group + BRAND + REGION,
+                                                num_trees = 165, min_instances_per_node = 9, subsampling_rate = 0.8,
+                                                feature_subset_strategy = "onethird", max_bins = 40, max_depth = 5)
+
+predicciones_rf_cant <- rf_model_cantidad |> 
+  ml_predict(df_max_ganancia) |> 
+  select(QUANTITY, prediction, starts_with("probability_")) |> 
+  glimpse()
+
+# Muestra estratificada por store y sku
+p <- 0.1
+
+sizes <- df_max_ganancia %>%
+  group_by(STORE_ID, SKU, anio) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  mutate(take = greatest(1L, round(n * p)))   # sin cast()
+
+muestra <- df_max_ganancia %>%
+  inner_join(sizes, by = c("STORE_ID", "SKU", "anio")) %>%
+  mutate(r = rand()) %>%
+  group_by(STORE_ID, SKU, anio) %>%
+  arrange(r, .by_group = TRUE) %>%
+  mutate(rn = row_number()) %>%
+  ungroup() %>%
+  filter(rn <= take) %>%
+  select(-r, -rn, -n, -take)
+
+glm <- ml_generalized_linear_regression(muestra,
+                                        QUANTITY ~ PRICE + STORE_ID + SKU + category + group + BRAND + REGION,
+                                        family = "poisson", link = "log")
+
+predicciones_glm_poisson <- glm |> 
+  ml_predict(df_max_ganancia) |> 
+  select(QUANTITY, prediction, starts_with("probability_")) |> 
+  glimpse()
+
+muestra_ <- muestra |> 
+  select(QUANTITY, PRICE, STORE_ID, SKU, category, group, BRAND, REGION) |> 
+  sparklyr::collect()
+
+write.csv(muestra_, "Predicciones/muestra_glm.csv", row.names = FALSE, quote = FALSE)
+
+
+glm_bn <- MASS::glm.nb(data = muestra_,
+                       QUANTITY ~ PRICE + STORE_ID + SKU + category + group + BRAND + REGION)
+
+
 # MAPE
-predicciones_glm |> 
+predicciones_glm_poisson |> 
   mutate(
     ape = abs((QUANTITY - prediction) / QUANTITY)   # Absolute Percentage Error
   ) |> 
@@ -382,27 +421,75 @@ predicciones_glm |>
     MAPE = mean(ape) * 100
   )
 
-# 1. Definimos un rango de precios (ejemplo: de 80% a 120% del precio actual)
-price_grid <- df_max_ganancia |> 
-  select(STORE_ID, SKU, PRICE, base_price, category, group, BRAND) |> 
-  mutate(min_price = PRICE * 0.8,
-         max_price = PRICE * 1.2) |> 
-  sdf_explode(col = "PRICE_SIM", vals = expr("sequence(min_price, max_price, (max_price - min_price)/20)"))
-# acá sequence genera 20 precios simulados por producto
+# ---------- Parámetros ----------
+n_points <- 25L
+denom <- n_points - 1L   # para el paso de la grilla
 
-# 2. Predecir cantidad usando el modelo entrenado
+# df_max_ganancia: debe tener al menos
+# STORE_ID, SKU, PRICE (precio actual), base_price (costo), category, group, BRAND
+
+# 0. Tabla auxiliar con 25 pasos (0..24)
+steps_df <- data.frame(step = 0:(n_points - 1))
+price_steps <- sdf_copy_to(sc, steps_df, overwrite = TRUE) |> 
+  mutate(dummy = 1L)
+
+# 1. Calcular rango histórico por STORE_ID x SKU
+df_items <- df_max_ganancia |> 
+  group_by(STORE_ID, SKU, category, group, BRAND, REGION) |> 
+  summarise(
+    min_price = min(PRICE),
+    max_price = max(PRICE),
+    costos    = min(costos)   # asegúrate de traer el costo (último o promedio)
+  ) |> 
+  mutate(dummy = 1L) |> 
+  ungroup()
+
+# 1. Cross join con tabla de pasos (0..24)
+price_grid <- df_items |> 
+  inner_join(price_steps, by = "dummy") |> 
+  select(-dummy) |> 
+  mutate(
+    PRICE_SIM = min_price + step * (max_price - min_price) / (n_points - 1),
+    PRICE     = PRICE_SIM   # el modelo fue entrenado con PRICE
+  )
+
+# 2. Predecir demanda
 price_pred <- ml_predict(gbmodel, price_grid)
 
 # 3. Calcular ganancia esperada
 price_profit <- price_pred |> 
-  mutate(
-    profit = (PRICE_SIM - base_price) * prediction
-  )
+  mutate(profit = (PRICE_SIM - costos) * prediction)
 
 # 4. Seleccionar el precio óptimo por producto y tienda
 optimal_price <- price_profit |> 
   group_by(STORE_ID, SKU) |> 
-  summarise(
-    best_price = first(PRICE_SIM[order_by(desc(profit))]),
-    best_profit = max(profit)
-  )
+  filter(profit == max(profit)) |> 
+  ungroup()
+
+# Grafico del profit vs precio en una tienda
+price_profit |>
+  filter(STORE_ID == "000008" & SKU == "BEAMAEY010") |> 
+  ggplot() +
+  aes(x = PRICE, y = profit) +
+  geom_point() +
+  geom_line() +
+  theme_bw()
+
+# Guardamos los precios optimos
+precios_productos <- optimal_price |> collect()
+write.csv(precios_productos, "Predicciones/precios_optimizados_gbm.csv", row.names = FALSE, quote = FALSE)
+
+
+precios_productos_join <- precios_productos |> 
+  left_join(df_product_master |> select(SKU, SUBGROUP) |> filter(SUBGROUP != "Basketball"), by = "SKU")
+
+precios_productos_suma <- precios_productos_join |> 
+  group_by(STORE_ID, SUBGROUP) |> 
+  summarise(PRICE = sum(PRICE))
+
+precios_productos_mediana <- precios_productos_join |> 
+  group_by(STORE_ID, SUBGROUP) |> 
+  summarise(PRICE = median(PRICE))
+
+# write.csv(precios_productos_suma, "Datos/precios_subgrupo_suma.csv", row.names = FALSE, quote = FALSE)
+# write.csv(precios_productos_mediana, "Datos/precios_subgrupo_mediana.csv", row.names = FALSE, quote = FALSE)
