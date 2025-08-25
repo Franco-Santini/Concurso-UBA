@@ -1,6 +1,5 @@
 ---
 title: "La Casa de Asterión: estimación de demanda y optimización de precios de artículos de venta minorista"
-author: "Gazze Simón, Moresi Manuel, Santini Franco"
 date: "`r Sys.Date()`"
 output:
   rmdformats::readthedown:
@@ -142,7 +141,7 @@ Teniendo en cuenta que la fijación de precios es un factor clave para el rendim
 
 Se busca comprender a fondo la relación entre sus precios, la demanda y otros factores que puedan influir en su rendimiento, con el objetivo de implementar una estrategia de precios más eficiente y orientada a resultados.
 
-Se trabajará con información proveniente de las transacciones realizadas en 9 cadenas de negocios minoristas en un período de 3 años, donde se podrá obtener información de cada uno de los negocios y diferentes características relacionadas al producto que se vende.
+Se trabajará con información proveniente de las transacciones realizadas en 9 cadenas de negocios minoristas en un período de 3 años, donde se podrá obtener información de cada uno de los negocios y diferentes características relacionadas al producto que se vende. Todo el análisis se realizará usando el Software estadístico `R` y está disponible en este [repositorio](https://github.com/Franco-Santini/Concurso-UBA).
 
 **Aclaración**: cuando se habla de transacción no refiere al evento completo de la compra, sino a la cantidad de productos iguales dentro de una compra.
 
@@ -1087,7 +1086,7 @@ Una vez entrenado el modelo, se construyó una grilla de precios que abarca desd
 
 Dado que la variable respuesta es discreta, una alternativa adecuada para modelar los datos es la Regresión Poisson. El modelo se expresa como:
 
-$g(\lambda) = X^t \beta + \epsilon, \ \ \epsilon \sim N(0, \sigma^2I)$
+$$g(\lambda) = X^t \beta + \epsilon, \ \ \epsilon \sim N(0, \sigma^2I)$$
 
 - $Y$ es el vector de variable respuesta que se distribuye $Poisson(\lambda)$
 - $g$ es la función de enlace del modelo que es, $ln(\lambda)$
@@ -1111,14 +1110,14 @@ Dado que el número total de combinaciones posibles entre productos y tiendas as
 
 ```{r tabla reg poisson}
 # Lectura de los datos
-precios_optimizados_reg_poisson <- read.csv("Predicciones/precios_optimizados_poisson.csv")
+precios_optimizados_reg_poisson <- read.csv("../Predicciones/precios_optimizados_poisson.csv")
 
 precios_optimizados_reg_poisson |>
   select(STORE_ID, SKU, category, group, BRAND, REGION, PRICE) |>
   top_n(n = 1000, PRICE) |> 
   kable(
     digits = 4,
-    col.names = c("ID Tiendas", "SKU", "Categoría", "Grupo", "Cadena", "Región", "Precio"),
+    col.names = c("ID Tiendas", "SKU", "Categoría", "Grupo", "Cadena", "Región", "Precio (USD)"),
     format = "html",
     booktabs = TRUE,
     align = "c" 
@@ -1129,7 +1128,7 @@ precios_optimizados_reg_poisson |>
     position = "center",
     font_size = 14
   ) |>
-  row_spec(0, bold = TRUE, color = "white", background = "steelblue") |>
+  row_spec(0, bold = TRUE, color = "white", background = "#A61C3C") |>
   column_spec(1, width = "6em") |>   
   column_spec(2, width = "10em") |>  
   column_spec(3:4, width = "10em") |> 
@@ -1162,7 +1161,7 @@ precios_optimizados_gbm |>
     position = "center",
     font_size = 14
   ) |>
-  row_spec(0, bold = TRUE, color = "white", background = "steelblue") |>  
+  row_spec(0, bold = TRUE, color = "white", background = "#A61C3C") |>  
   column_spec(1, width = "6em") |>   
   column_spec(2, width = "8em") |>  
   column_spec(3:5, width = "8em") |> 
