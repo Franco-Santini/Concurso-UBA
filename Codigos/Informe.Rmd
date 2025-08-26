@@ -3,7 +3,7 @@ title: "La Casa de Asterión: estimación de demanda y optimización de precios 
 date: "`r Sys.Date()`"
 output:
   rmdformats::readthedown:
-    self_contained: false
+    self_contained: true
     toc_depth: 3
     number_sections: true
 ---
@@ -135,7 +135,7 @@ Teniendo en cuenta que la fijación de precios es un factor clave para el rendim
 
 <div style="text-align: center;">
 
-<img src="https://levainvierte.com/wp-content/uploads/2025/03/%C2%BFCuanto-es-lo-maximo-que-se-puede-invertir-en-CETES-Todo-lo-que-necesitas-saber-para-invertir-con-exito.jpg" width="650"/>
+<img src="https://levainvierte.com/wp-content/uploads/2025/03/%C2%BFCuanto-es-lo-maximo-que-se-puede-invertir-en-CETES-Todo-lo-que-necesitas-saber-para-invertir-con-exito.jpg" width="650">
 
 </div>
 
