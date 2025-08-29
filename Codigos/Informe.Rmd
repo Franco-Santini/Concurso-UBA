@@ -1,5 +1,6 @@
 ---
 title: "La Casa de Asterión: estimación de demanda y optimización de precios de artículos de venta minorista"
+author: "Franco Santini - Manuel Moresi - Simón Gazze"
 date: "`r Sys.Date()`"
 output:
   rmdformats::readthedown:
@@ -133,11 +134,7 @@ La empresa *La Casa de Asterión* es una cadena de negocios minoristas de artíc
 
 Teniendo en cuenta que la fijación de precios es un factor clave para el rendimiento de cualquier negocio. Un precio demasiado alto puede reducir el volumen de ventas, mientras que uno demasiado bajo puede disminuir el margen de ganancia, incluso si la demanda aumenta. Encontrar el punto de equilibrio adecuado requiere no solo un análisis detallado de las ventas y de la elasticidad de la demanda, sino también la consideración de factores externos como la competencia, la estacionalidad y los cambios en las preferencias de los consumidores.
 
-<div style="text-align: center;">
-
-<img src="https://levainvierte.com/wp-content/uploads/2025/03/%C2%BFCuanto-es-lo-maximo-que-se-puede-invertir-en-CETES-Todo-lo-que-necesitas-saber-para-invertir-con-exito.jpg" width="650">
-
-</div>
+![](imagen-precios.jpg){width=650px}
 
 Se busca comprender a fondo la relación entre sus precios, la demanda y otros factores que puedan influir en su rendimiento, con el objetivo de implementar una estrategia de precios más eficiente y orientada a resultados.
 
